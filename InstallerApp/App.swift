@@ -470,11 +470,33 @@ struct InstallerApp: App {
     }
     var body: some Scene {
         MenuBarExtra("iSideload", systemImage: "shippingbox") {
-            ScrollView { ContentView() }
-                .frame(width: 470, height: 660)
-                .background(Color.white)
-                .environment(\.colorScheme, .light)   // pure-white page, readable in dark mode too
+            RootPanel()
         }
         .menuBarExtraStyle(.window)
+    }
+}
+
+// Measures the intrinsic height of the content and sizes the window to fit it, so
+// the panel grows/shrinks as sections expand or collapse. A ScrollView only kicks
+// in (showing its bar) when the content would be taller than the screen.
+private struct ContentHeightKey: PreferenceKey {
+    static var defaultValue: CGFloat = 0
+    static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
+}
+
+struct RootPanel: View {
+    @State private var contentHeight: CGFloat = 0
+    private var maxHeight: CGFloat { (NSScreen.main?.visibleFrame.height ?? 900) - 48 }
+    var body: some View {
+        ScrollView {
+            ContentView()
+                .background(GeometryReader { g in
+                    Color.clear.preference(key: ContentHeightKey.self, value: g.size.height)
+                })
+        }
+        .frame(width: 470, height: min(contentHeight, maxHeight))
+        .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+        .background(Color.white)
+        .environment(\.colorScheme, .light)   // pure-white page, readable in dark mode too
     }
 }
