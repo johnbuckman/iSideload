@@ -6,8 +6,40 @@ import AltSign
 import SwiftBridge
 import SideloaderKit
 import AppKit
+import ServiceManagement
 import UniformTypeIdentifiers
 import Foundation
+
+// In-app refresh scheduler — replaces the external LaunchAgents. Runs while the
+// app is alive in the menu bar: refreshes on device-connect and on a ~2h timer
+// (refreshAll is itself expiry-aware + single-flight-locked, so this is cheap).
+final class RefreshDaemon {
+    static let shared = RefreshDaemon()
+    private let q = DispatchQueue(label: "com.decent.isideload.refresh")
+    private var seen = Set<String>()
+    private var lastPeriodic = Date.distantPast
+    private var started = false
+
+    func start() {
+        guard !started else { return }
+        started = true
+        q.async { [weak self] in
+            while true {
+                self?.tick()
+                Thread.sleep(forTimeInterval: 25)
+            }
+        }
+    }
+    private func tick() {
+        let devices = Set(Sideloader.connectedDevices().map { $0.udid })
+        let newlyConnected = !devices.subtracting(seen).isEmpty
+        seen = devices
+        let periodicDue = Date().timeIntervalSince(lastPeriodic) > 2 * 3600
+        guard (newlyConnected || periodicDue), !devices.isEmpty else { return }
+        if periodicDue { lastPeriodic = Date() }
+        Task { try? await Sideloader.refreshAll(log: { print("[iSideload refresh] \($0)") }) }
+    }
+}
 
 let iSideloadLogPath = (("~/Library/Logs/iSideload.log") as NSString).expandingTildeInPath
 func installDiagnosticsLog() {
@@ -39,6 +71,7 @@ enum InstallKind { case ipa(String), source(SourceApp) }
     // install
     @Published var installing = false
     @Published var status = ""
+    @Published var launchAtLogin = (SMAppService.mainApp.status == .enabled)
     @Published var sourceURL = ""
     @Published var sourceApps: [SourceApp] = []
 
@@ -209,6 +242,29 @@ enum InstallKind { case ipa(String), source(SourceApp) }
             await MainActor.run { self.tracked = Tracked.all(); self.status = "Removed \(t.name)."; self.installing = false }
         }
     }
+
+    // MARK: settings
+
+    func setLaunchAtLogin(_ on: Bool) {
+        do {
+            if on { if SMAppService.mainApp.status != .enabled { try SMAppService.mainApp.register() } }
+            else { try SMAppService.mainApp.unregister() }
+        } catch {
+            status = "Couldn't change login item: \(error.localizedDescription)"
+        }
+        launchAtLogin = (SMAppService.mainApp.status == .enabled)
+    }
+
+    func refreshAllNow() {
+        installing = true; status = "Refreshing all apps…"
+        Task.detached { [weak self] in
+            guard let self else { return }
+            let log: @Sendable (String) -> Void = { m in print("[iSideload] \(m)"); Task { @MainActor in self.status = String(m.split(separator: "\n").first.map(String.init)?.prefix(160) ?? "") } }
+            do { try await Sideloader.refreshAll(log: log); await MainActor.run { self.status = "Refreshed." } }
+            catch { await MainActor.run { self.status = "Refresh failed: \(error.localizedDescription)" } }
+            await MainActor.run { self.tracked = Tracked.all(); self.installing = false }
+        }
+    }
 }
 
 // ── UI ──
@@ -303,6 +359,16 @@ struct ContentView: View {
                 }
             }
 
+            Divider()
+            DisclosureGroup("Settings") {
+                VStack(alignment: .leading, spacing: 6) {
+                    Toggle("Launch iSideload at login (keeps apps auto-refreshed)", isOn: Binding(get: { m.launchAtLogin }, set: { m.setLaunchAtLogin($0) }))
+                    Button("Refresh all apps now") { m.refreshAllNow() }.disabled(m.installing)
+                    Text("iSideload keeps apps signed while it runs in the menu bar — it re-signs automatically when you plug in a device and every couple of hours. No separate background program is needed.")
+                        .font(.caption2).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
+                }.padding(.top, 2)
+            }.font(.callout)
+
             HStack {
                 if m.installing { ProgressView().scaleEffect(0.6).frame(width: 16, height: 16) }
                 Text(m.status).font(.callout).foregroundStyle(m.status.hasPrefix("✅") ? .green : (m.status.hasPrefix("Failed") ? .red : .primary))
@@ -329,10 +395,10 @@ struct ContentView: View {
 
 @main
 struct InstallerApp: App {
-    init() { installDiagnosticsLog() }
+    init() { installDiagnosticsLog(); RefreshDaemon.shared.start() }
     var body: some Scene {
-        MenuBarExtra("iSideload", systemImage: "square.and.arrow.down.on.square") {
-            ScrollView { ContentView() }.frame(width: 470, height: 640)
+        MenuBarExtra("iSideload", systemImage: "shippingbox") {
+            ScrollView { ContentView() }.frame(width: 470, height: 660)
         }
         .menuBarExtraStyle(.window)
     }

@@ -1,0 +1,19 @@
+<svg viewBox="0 0 512 512" xmlns="http://www.w3.org/2000/svg">
+  <defs>
+    <linearGradient id="g6" x1="0" y1="0" x2="0" y2="1">
+      <stop offset="0" stop-color="#f6b93b"/>
+      <stop offset="1" stop-color="#e58e26"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="112" fill="url(#g6)"/>
+  <!-- box body -->
+  <path d="M136 236 L256 296 L376 236 L376 372 L256 432 L136 372 Z" fill="#8a5217"/>
+  <path d="M256 296 L256 432 L136 372 L136 236 Z" fill="#a9631d"/>
+  <path d="M256 296 L376 236 L376 372 L256 432 Z" fill="#7a4713"/>
+  <!-- open flaps -->
+  <path d="M136 236 L256 296 L196 200 L76 176 Z" fill="#c47a26"/>
+  <path d="M376 236 L256 296 L316 200 L436 176 Z" fill="#b06e22"/>
+  <!-- app popping out -->
+  <rect x="216" y="96" width="80" height="80" rx="20" fill="#fff"/>
+  <path d="M256 116 v40 M236 136 h40" stroke="#e58e26" stroke-width="12" stroke-linecap="round"/>
+</svg>

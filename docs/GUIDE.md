@@ -1,0 +1,266 @@
+# iSideload — the complete guide
+
+This guide walks you through everything: what iSideload is, what you need, exactly
+what to do on your Mac **and** on your iPhone/iPad, and — importantly — the real
+benefits and limits so you know what you're getting into before you start.
+
+---
+
+## 1. What iSideload is (and how it works)
+
+iSideload is a small **macOS menu-bar app** that installs iOS apps onto your own
+iPhone or iPad **without the App Store and without a jailbreak**, using your own
+Apple ID to sign them.
+
+It works the way AltStore/AltServer do, but simpler and self-contained:
+
+1. You sign in with an Apple ID (a free one is fine).
+2. iSideload asks Apple for a free **development certificate** and a
+   **provisioning profile** for your device — exactly what Xcode does for
+   developers.
+3. It **signs the app on your Mac** with that certificate.
+4. It **installs the app onto your device** over the USB cable (the same channel
+   Finder uses to sync).
+
+The catch with free Apple IDs is that Apple only makes those profiles valid for
+**7 days**. So iSideload also **re-signs and re-installs your apps automatically**
+before they expire, as long as the app is running on your Mac and your device is
+reachable.
+
+**Everything happens from your Mac.** The iPhone/iPad has no special software on
+it — it just receives the signed app. That also means the apps stay tied to *this*
+Mac (it holds your logins and signing certificate).
+
+---
+
+## 2. What you need
+
+- A **Mac** (macOS 14 or newer).
+- An **iPhone or iPad**.
+- A **USB/Lightning/USB-C cable** to connect them. (Wi-Fi is possible but
+  unreliable on modern iOS — see §9.)
+- An **Apple ID**. A **free** one works. You can create a fresh one at
+  <https://icloud.com> — a dedicated "sideloading" Apple ID is recommended so you
+  don't tie up your main account's developer slots.
+- The app you want to install, as an **`.ipa` file** or an **AltStore-format
+  source** (a URL or `.json` catalog that points at `.ipa` files).
+
+---
+
+## 3. Understand the limits FIRST (free vs paid)
+
+This is the part people wish they'd read first.
+
+**With a FREE Apple ID:**
+
+| Limit | Value |
+|---|---|
+| Apps installed at once (per Apple ID) | **3** |
+| How long an app stays valid before it must be re-signed | **7 days** |
+| New App IDs you can register | ~**10 per 7 days** |
+| Signing certificates | **1** |
+| Entitlements | Limited — **no** push notifications, iCloud, app groups, associated domains, HealthKit, etc. |
+
+- **3-app limit:** each free Apple ID can only keep 3 sideloaded apps installed.
+  iSideload lets you **add several Apple IDs** — each one gives you another 3 slots.
+- **7-day expiry:** after 7 days an app "expires" and stops launching until it's
+  re-signed. iSideload refreshes automatically (see §7), but the app must be
+  refreshed *before* the 7 days are up, which means your Mac + device need to be
+  together periodically.
+- **Entitlement limits:** apps that need push notifications, iCloud sync, app
+  groups, etc. **will not install or run** on a free account. Plain apps are fine.
+
+**With a PAID Apple Developer account ($99/year):**
+
+- Apps last **1 year** instead of 7 days.
+- The app-count limit is effectively lifted.
+- Full entitlements.
+
+iSideload shows each account's type ("Free · 7 days" or "Paid · 1 year") and, for
+free accounts, a live **`slots N/3`** indicator.
+
+---
+
+## 4. Prepare your iPhone/iPad (do this once)
+
+**a. Connect it to the Mac with a cable and unlock it.**
+
+**b. Trust the computer.** The first time you connect, the device asks
+"Trust This Computer?" — tap **Trust** and enter your passcode.
+
+**c. Turn on Developer Mode** *(required on iOS/iPadOS 16 and later)*:
+
+1. On the device: **Settings → Privacy & Security → Developer Mode**.
+2. Toggle **Developer Mode** on.
+3. The device restarts; after it reboots, confirm **Turn On**.
+
+> Without Developer Mode, iOS 16+ will refuse to launch sideloaded apps — you'll
+> see "Untrusted Developer" or the app just won't open. If you don't see a
+> Developer Mode option, connect the device to the Mac once and it should appear.
+
+**d. (Optional) Enable Wi-Fi sync** if you want to *try* refreshing without a
+cable: with the device plugged in, open **Finder → [your device] → General →
+"Show this iPhone/iPad when on Wi-Fi"**. (See §9 for why USB is still the reliable
+path.)
+
+---
+
+## 5. Install iSideload on your Mac
+
+1. Get `iSideload.app` (build it from source — see the repo README — or use a
+   provided build).
+2. Move it to **/Applications** (or /Applications/AI Apps).
+3. **First launch:** because the app isn't from the App Store, macOS Gatekeeper
+   may block it. **Right-click the app → Open → Open** to allow it the first time.
+4. iSideload is a **menu-bar app** — it doesn't appear in the Dock. Look for the
+   **crate icon in your menu bar** (top-right). Click it to open the panel.
+
+Optionally, in the panel's **Settings** section, enable **"Launch iSideload at
+login"** so it's always running and can keep your apps refreshed.
+
+---
+
+## 6. Add your Apple ID and install an app
+
+**a. Add an account.** In the iSideload panel, under *Your Apple accounts*, click
+**Add account** (or just fill the login box):
+
+- Enter the Apple ID email + password.
+- **Two-factor:** if the account has no Apple device signed into it (typical for a
+  dedicated sideloading ID), tick **"Text me the code"** — Apple will SMS the code
+  to the phone number on the account. Enter the code.
+- On success the account appears with its type badge and slot count.
+
+> Your password is only used to talk to Apple and is stored in the macOS Keychain
+> so the app can refresh unattended. It is never written in plain text.
+
+**b. Install an app** (device connected + unlocked):
+
+- **Source URL** — paste an AltStore-format source URL, click **Load**, then
+  **Install** next to the app you want; or
+- **Install from .json…** — pick a local AltStore-format catalog file; or
+- **Install from .ipa…** — pick a single `.ipa` (or `.app`) file.
+
+If you have more than one account or more than one device connected, iSideload
+asks **which account** and **which device** to use.
+
+**c. Trust the developer on the device.** The first app you install from a given
+Apple ID needs a one-time trust:
+
+- On the device: **Settings → General → VPN & Device Management** →
+  under *Developer App*, tap your Apple ID → **Trust**.
+
+Now open the app from your Home Screen. 🎉
+
+---
+
+## 7. Keeping apps alive (the 7-day thing)
+
+Free-signed apps expire after 7 days. iSideload keeps them alive **by itself** —
+there's no separate background program:
+
+- While iSideload is running in the menu bar, it **re-signs and reinstalls**
+  apps that are nearing expiry **whenever you plug the device in**, and on a
+  timer every couple of hours.
+- Enable **Settings → Launch iSideload at login** so it's always running.
+- There's also a **Refresh all apps now** button, and a per-app **Refresh**.
+
+**Practical rule of thumb:** plug your device into this Mac every few days (before
+the 7-day clock runs out) and your apps keep working. If a device is away from
+this Mac for more than 7 days, its apps will expire until you reconnect.
+
+---
+
+## 8. Managing your apps (the menu-bar panel)
+
+Under each Apple account you'll see its installed apps, and for each one:
+
+- **which device** it's on and **when it expires** ("expires in N days", red if
+  expired);
+- a **Refresh** button — re-sign + reinstall that one app now;
+- a **–** button — **uninstall** it from the device *and delete its App ID*, which
+  **frees up a slot** so you can install something else.
+
+Each free account shows **`slots N/3`**. Hit the limit? Remove an app (or add
+another Apple ID) to make room.
+
+---
+
+## 9. Benefits
+
+- **Free** — no paid developer account required.
+- **No jailbreak** — uses Apple's official developer signing.
+- **Your own signing** — apps are signed with *your* Apple ID, not a shared
+  certificate that can get revoked out from under you.
+- **Multiple accounts & devices** — manage several Apple IDs (more slots) and push
+  to several devices from one place.
+- **Self-contained** — one menu-bar app; no server, no Docker, no companion app on
+  the device.
+- **Automatic upkeep** — handles the 7-day refresh for you.
+
+---
+
+## 10. Limits & gotchas (read this)
+
+- **3 apps per free Apple ID; 7-day expiry; ~10 App IDs/week; 1 certificate.**
+  These are Apple's limits, not iSideload's. Add more Apple IDs for more slots.
+- **Entitlements:** free accounts can't grant push notifications, iCloud, app
+  groups, associated domains, etc. Apps needing them won't work — use a paid
+  account for those.
+- **Developer Mode is mandatory** on iOS 16+ (see §4c).
+- **It's tied to this Mac.** Your logins, Keychain password, and signing
+  certificate live on the Mac that installed the apps. A different Mac can't
+  refresh them.
+- **Wi-Fi refresh is unreliable**, especially on iOS 17+. Wi-Fi install needs the
+  device paired, on the same network, awake/unlocked, and on modern iOS it needs a
+  network "tunnel" that isn't set up here. **USB is the dependable path** — plug in
+  to install and to refresh.
+- **The Mac app isn't notarized** — Gatekeeper will prompt on first launch
+  (right-click → Open).
+- **Rotating certificates:** if the saved certificate is ever lost or revoked,
+  iSideload issues a new one; because a free account has only one certificate, the
+  next refresh re-signs your apps onto the new one (they may briefly need that
+  refresh to keep working).
+
+---
+
+## 11. Troubleshooting
+
+- **"Untrusted Developer" / app won't open** → you skipped **Trust** (§6c) or
+  **Developer Mode** (§4c).
+- **Sign-in says "incorrect password" but it's right** → make sure you're using
+  the right Apple ID; if the account has 2FA and no Apple device, use **"Text me
+  the code."**
+- **No 2FA code arrives** → tick **"Text me the code"** so it's sent by SMS to the
+  phone number on the account (email does *not* receive 2FA codes).
+- **"No device connected"** → plug in over USB, unlock the device, and make sure
+  you tapped **Trust This Computer**.
+- **Install fails at the last step** → confirm the device is unlocked and Developer
+  Mode is on; try a different cable/port.
+- **App expired** → open iSideload (or plug in) and hit **Refresh**; enable
+  launch-at-login so it happens automatically.
+- **"Maximum number of certificates"** → iSideload handles this by reusing/rotating
+  your one free certificate; if it persists, remove an app to free things up.
+- **Hit the 3-app limit** → remove an app (frees the slot) or add another Apple ID.
+
+---
+
+## 12. How it works under the hood (for the curious)
+
+- **Login & provisioning** use Apple's developer services (the same APIs Xcode
+  uses), including the "anisette" anti-abuse data generated locally on your Mac.
+- **Signing** uses **zsign**, which produces a modern **SHA-256 CodeDirectory** —
+  the format iOS 16–26 require (the older `ldid` used by some tools produces a
+  SHA-1 signature that newer iOS rejects).
+- **Installation** goes over the lockdown/`usbmux` protocol via
+  `pymobiledevice3` — the same channel Finder uses.
+- One **certificate is reused per account** (persisted locally), so re-signing one
+  app doesn't invalidate your others.
+
+---
+
+## Credits & license
+
+iSideload is built on **AltSign** from the **AltStore** / **SideStore** projects
+(© Riley Testut and contributors), licensed **AGPL-3.0**, and is itself licensed
+**AGPL-3.0**. The signer is **zsign** by zhlynn (**MIT**). See `LICENSE`.

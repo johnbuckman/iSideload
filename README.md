@@ -4,6 +4,9 @@ A small **macOS menu-bar app** that installs and keeps iOS apps signed on your
 devices using a **free Apple ID** — a lean, self-contained alternative to
 AltStore/SideStore that signs on the Mac.
 
+> **New to sideloading?** Read the **[full step-by-step guide](docs/GUIDE.md)** —
+> what to do on your iPhone/iPad, what to download, and the real benefits & limits.
+
 ## What it does
 
 - **Sign in with one or more Apple IDs** (free or paid). Login, 2-factor
@@ -31,8 +34,9 @@ swift build --product InstallerApp     # the menu-bar app
 swift build --product Provision         # the CLI (install / refresh)
 ```
 
-`rebuild-app.sh` bundles the app into `iSideload.app`. Install to a device
-requires [`pymobiledevice3`](https://github.com/doronz88/pymobiledevice3).
+`./bundle-app.sh` builds and bundles the menu-bar app into `iSideload.app`.
+Installing to a device requires [`pymobiledevice3`](https://github.com/doronz88/pymobiledevice3)
+(`pip install pymobiledevice3`).
 
 ## Credits & license
 
