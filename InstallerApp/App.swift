@@ -277,6 +277,8 @@ enum InstallKind { case ipa(String), source(SourceApp) }
 // ── UI ──
 struct ContentView: View {
     @StateObject private var m = AppModel()
+    @State private var accountsExpanded = true
+    @State private var installExpanded = true
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -285,7 +287,8 @@ struct ContentView: View {
                 .font(.caption).foregroundStyle(.secondary).fixedSize(horizontal: false, vertical: true)
 
             // Accounts + their installed apps
-            Text("Your Apple accounts").font(.headline)
+            DisclosureGroup("Your Apple accounts", isExpanded: $accountsExpanded) {
+              VStack(alignment: .leading, spacing: 8) {
             if m.accounts.isEmpty { Text("No accounts yet — add one below.").font(.caption).foregroundStyle(.secondary) }
             ForEach(m.accounts) { acc in
                 let used = m.tracked.filter { $0.appleID == acc.appleID }.count
@@ -348,10 +351,13 @@ struct ContentView: View {
             } else {
                 Button { m.addingAccount = true } label: { Label("Add account", systemImage: "plus.circle") }.buttonStyle(.borderless)
             }
+              }
+            }.font(.headline)
 
             if !m.accounts.isEmpty {
                 Divider()
-                Text("Install").font(.headline)
+                DisclosureGroup("Install", isExpanded: $installExpanded) {
+                  VStack(alignment: .leading, spacing: 8) {
                 HStack {
                     TextField("Source URL (AltStore repo)", text: $m.sourceURL).textFieldStyle(.roundedBorder)
                     Button("Load") { m.loadSource() }.disabled(m.installing)
@@ -370,6 +376,8 @@ struct ContentView: View {
                     Button("Install from .json…") { m.pickJSON() }.disabled(m.installing)
                     Button("Install from .ipa…") { m.pickIPA() }.disabled(m.installing)
                 }
+                  }
+                }.font(.headline)
             }
 
             Divider()
