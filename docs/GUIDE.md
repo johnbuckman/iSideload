@@ -61,8 +61,13 @@ This is the part people wish they'd read first.
 | Signing certificates | **1** |
 | Entitlements | Limited — **no** push notifications, iCloud, app groups, associated domains, HealthKit, etc. |
 
-- **3-app limit:** each free Apple ID can only keep 3 sideloaded apps installed.
-  iSideload lets you **add several Apple IDs** — each one gives you another 3 slots.
+- **3-app limit — but you can beat it with multiple Apple IDs.** Each free Apple
+  ID keeps only 3 sideloaded apps installed at once. **iSideload lets you add as
+  many Apple IDs as you like, and each one is completely independent — it gets its
+  own 3 app slots and its own signing.** So 2 accounts = 6 apps, 3 accounts = 9,
+  and so on. Since you can create extra free Apple IDs in seconds at
+  <https://icloud.com>, adding accounts is the easy way to *greatly* increase how
+  many apps you can install — iSideload just asks which account to use each time.
 - **7-day expiry:** after 7 days an app "expires" and stops launching until it's
   re-signed. iSideload refreshes automatically (see §7), but the app must be
   refreshed *before* the 7 days are up, which means your Mac + device need to be
@@ -107,13 +112,11 @@ path.)
 
 ## 5. Install iSideload on your Mac
 
-1. Get `iSideload.app` (build it from source — see the repo README — or use a
-   provided build).
-2. Move it to **/Applications** (or /Applications/AI Apps).
-3. **First launch:** because the app isn't from the App Store, macOS Gatekeeper
-   may block it. **Right-click the app → Open → Open** to allow it the first time.
-4. iSideload is a **menu-bar app** — it doesn't appear in the Dock. Look for the
-   **crate icon in your menu bar** (top-right). Click it to open the panel.
+1. Open the downloaded `.dmg` and drag **iSideload** into your **Applications**
+   folder.
+2. Launch it. iSideload is a **menu-bar app** — it doesn't appear in the Dock;
+   look for the **crate icon in your menu bar** (top-right). Click it to open the
+   panel.
 
 Optionally, in the panel's **Settings** section, enable **"Launch iSideload at
 login"** so it's always running and can keep your apps refreshed.
@@ -192,8 +195,9 @@ another Apple ID) to make room.
 - **No jailbreak** — uses Apple's official developer signing.
 - **Your own signing** — apps are signed with *your* Apple ID, not a shared
   certificate that can get revoked out from under you.
-- **Multiple accounts & devices** — manage several Apple IDs (more slots) and push
-  to several devices from one place.
+- **Multiple accounts = many more apps** — add as many Apple IDs as you want and
+  each adds its own 3 app slots, so your total capacity scales with the number of
+  accounts. Push to several devices from one place, too.
 - **Self-contained** — one menu-bar app; no server, no Docker, no companion app on
   the device.
 - **Automatic upkeep** — handles the 7-day refresh for you.
@@ -215,8 +219,6 @@ another Apple ID) to make room.
   device paired, on the same network, awake/unlocked, and on modern iOS it needs a
   network "tunnel" that isn't set up here. **USB is the dependable path** — plug in
   to install and to refresh.
-- **The Mac app isn't notarized** — Gatekeeper will prompt on first launch
-  (right-click → Open).
 - **Rotating certificates:** if the saved certificate is ever lost or revoked,
   iSideload issues a new one; because a free account has only one certificate, the
   next refresh re-signs your apps onto the new one (they may briefly need that
