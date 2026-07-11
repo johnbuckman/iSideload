@@ -343,7 +343,7 @@ struct ContentView: View {
                                             Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
                                                 .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
                                         }
-                                        .padding(.leading, 26)
+                                        .padding(.leading, 42)
                                     }
                                 }
                             } label: {
@@ -353,7 +353,7 @@ struct ContentView: View {
                                 }
                             }
                         }
-                    }.padding(.leading, 14)
+                    }.padding(.leading, 26)
                 } label: {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "person.crop.circle").frame(width: 20)
