@@ -17,8 +17,8 @@ final class RefreshDaemon {
     static let shared = RefreshDaemon()
     private let q = DispatchQueue(label: "com.decent.isideload.refresh")
     private var seen = Set<String>()
-    private var lastPeriodic = Date.distantPast
     private var started = false
+    private var tickCount = 0
 
     func start() {
         guard !started else { return }
@@ -31,13 +31,25 @@ final class RefreshDaemon {
         }
     }
     private func tick() {
-        let devices = Set(Sideloader.connectedDevices().map { $0.udid })
+        tickCount += 1
+        let devices = Set(Sideloader.connectedDevices().map { $0.udid })   // USB + WiFi-reachable
         let newlyConnected = !devices.subtracting(seen).isEmpty
         seen = devices
-        let periodicDue = Date().timeIntervalSince(lastPeriodic) > 2 * 3600
-        guard (newlyConnected || periodicDue), !devices.isEmpty else { return }
-        if periodicDue { lastPeriodic = Date() }
-        Task { try? await Sideloader.refreshAll(log: { print("[iSideload refresh] \($0)") }) }
+
+        // "Urgent" = an app past 70% of its signing window whose device is reachable right now.
+        // Free profiles die at 7 days and only install to an UNLOCKED device, so near expiry we
+        // poll every 5 minutes and push the moment the device is reachable (USB or WiFi/unlocked).
+        let now = Date().timeIntervalSince1970
+        let urgentReachable = Tracked.all().contains { t in
+            guard let li = t.lastInstalled else { return false }
+            let past70 = (now - li) > 0.7 * Double(t.validityDays) * 86400
+            return past70 && devices.contains(t.udid)
+        }
+        let fiveMinTick = (tickCount % 12 == 0)   // 25s × 12 ≈ 5 min
+
+        if (newlyConnected && !devices.isEmpty) || (fiveMinTick && urgentReachable) {
+            Task { try? await Sideloader.refreshAll(log: { print("[iSideload refresh] \($0)") }) }
+        }
     }
 }
 
@@ -444,7 +456,16 @@ struct ContentView: View {
 
 @main
 struct InstallerApp: App {
-    init() { installDiagnosticsLog(); RefreshDaemon.shared.start() }
+    init() {
+        installDiagnosticsLog()
+        RefreshDaemon.shared.start()
+        // Launch at login is ON by default — register once on first run; the Settings
+        // toggle can turn it off afterwards (we don't re-enable once configured).
+        if !UserDefaults.standard.bool(forKey: "isideload.loginItemConfigured") {
+            try? SMAppService.mainApp.register()
+            UserDefaults.standard.set(true, forKey: "isideload.loginItemConfigured")
+        }
+    }
     var body: some Scene {
         MenuBarExtra("iSideload", systemImage: "shippingbox") {
             ScrollView { ContentView() }

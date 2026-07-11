@@ -26,16 +26,22 @@ static void status_cb(plist_t command, plist_t status, void *udata) {
 
 static idevice_t connect_dev(const char *udid) {
     idevice_t d = NULL;
-    if (idevice_new_with_options(&d, udid, IDEVICE_LOOKUP_USBMUX) != IDEVICE_E_SUCCESS) return NULL;
+    // Include NETWORK so WiFi-reachable devices work (prefers USB when both present).
+    enum idevice_options opt = (enum idevice_options)(IDEVICE_LOOKUP_USBMUX | IDEVICE_LOOKUP_NETWORK);
+    if (idevice_new_with_options(&d, udid, opt) != IDEVICE_E_SUCCESS) return NULL;
     return d;
 }
 
 static int cmd_list(void) {
-    char **udids = NULL; int count = 0;
-    if (idevice_get_device_list(&udids, &count) != IDEVICE_E_SUCCESS) return 0;
+    idevice_info_t *devs = NULL; int count = 0;
+    if (idevice_get_device_list_extended(&devs, &count) != IDEVICE_E_SUCCESS) return 0;
     for (int i = 0; i < count; i++) {
+        const char *udid = devs[i]->udid;
+        int dup = 0;                                    // a device may appear as both USB + WiFi
+        for (int j = 0; j < i; j++) if (!strcmp(devs[j]->udid, udid)) { dup = 1; break; }
+        if (dup) continue;
         char *name = NULL;
-        idevice_t d = connect_dev(udids[i]);
+        idevice_t d = connect_dev(udid);
         lockdownd_client_t ld = NULL;
         if (d && lockdownd_client_new_with_handshake(d, &ld, "isideload") == LOCKDOWN_E_SUCCESS) {
             plist_t v = NULL;
@@ -45,11 +51,11 @@ static int cmd_list(void) {
             }
             lockdownd_client_free(ld);
         }
-        printf("%s\t%s\n", udids[i], name ? name : udids[i]);
+        printf("%s\t%s\n", udid, name ? name : udid);
         free(name);
         if (d) idevice_free(d);
     }
-    idevice_device_list_free(udids);
+    idevice_device_list_extended_free(devs);
     return 0;
 }
 

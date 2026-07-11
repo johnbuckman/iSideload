@@ -542,7 +542,6 @@ public struct Sideloader {
         defer { try? fm.removeItem(atPath: lock) }
 
         let now = Date().timeIntervalSince1970
-        let refreshThreshold = 5.0 * 24 * 3600   // re-sign only when within ~2 days of the 7-day expiry
         let connected = Set(connectedDevices().map { $0.udid })
         let fallbackUDID = connectedDevices().first?.udid ?? ""
 
@@ -568,7 +567,8 @@ public struct Sideloader {
                 }
             }
             for t in apps {
-                if let li = t.lastInstalled, now - li < refreshThreshold { log("\(t.name) still fresh — skipping"); continue }
+                // re-sign only once past 70% of the signing window (2 days left on a 7-day free profile)
+                if let li = t.lastInstalled, now - li < 0.7 * Double(t.validityDays) * 86400 { log("\(t.name) still fresh — skipping"); continue }
                 let udid = (!t.udid.isEmpty && connected.contains(t.udid)) ? t.udid : fallbackUDID
                 if udid.isEmpty { log("no device connected for \(t.name) — skipping"); continue }
                 do {

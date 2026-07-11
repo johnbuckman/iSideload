@@ -167,10 +167,12 @@ Now open the app from your Home Screen. 🎉
 Free-signed apps expire after 7 days. iSideload keeps them alive **by itself** —
 there's no separate background program:
 
-- While iSideload is running in the menu bar, it **re-signs and reinstalls**
-  apps that are nearing expiry **whenever you plug the device in**, and on a
-  timer every couple of hours.
-- Enable **Settings → Launch iSideload at login** so it's always running.
+- iSideload **launches at login by default** (you can turn that off in Settings),
+  so it's always in the menu bar keeping your apps alive.
+- It re-signs and reinstalls an app once it passes **~70% of its 7-day window**
+  (about 2 days before expiry). It pushes the update **the moment your device is
+  reachable over USB or WiFi** — and near expiry it re-checks **every 5 minutes**,
+  installing as soon as the device is awake/unlocked and on the network.
 - There's also a **Refresh all apps now** button, and a per-app **Refresh**.
 
 **Practical rule of thumb:** plug your device into this Mac every few days (before
@@ -220,10 +222,12 @@ another Apple ID) to make room.
 - **It's tied to this Mac.** Your logins, Keychain password, and signing
   certificate live on the Mac that installed the apps. A different Mac can't
   refresh them.
-- **Wi-Fi refresh is unreliable**, especially on iOS 17+. Wi-Fi install needs the
-  device paired, on the same network, awake/unlocked, and on modern iOS it needs a
-  network "tunnel" that isn't set up here. **USB is the dependable path** — plug in
-  to install and to refresh.
+- **Wi-Fi refresh** needs the device **paired, on the same Wi-Fi network, and
+  unlocked** — installs won't run against a *locked* device. That's exactly why,
+  once an app is near expiry, iSideload re-checks **every 5 minutes** and pushes
+  the moment the device is reachable and unlocked (so a device you pick up now and
+  then will stay signed). Enable Wi-Fi sync (§4d) to allow it. **USB is still the
+  most reliable** — a quick plug-in always refreshes everything that's due.
 - **Rotating certificates:** if the saved certificate is ever lost or revoked,
   iSideload issues a new one; because a free account has only one certificate, the
   next refresh re-signs your apps onto the new one (they may briefly need that
