@@ -123,7 +123,7 @@ login"** so it's always running and can keep your apps refreshed.
 
 ---
 
-## 6. Add your Apple ID and install an app
+## 6. Add your Apple IDs and install apps
 
 **a. Add an account.** In the iSideload panel, under *Your Apple accounts*, click
 **Add account** (or just fill the login box):
