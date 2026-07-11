@@ -229,6 +229,14 @@ enum InstallKind { case ipa(String), source(SourceApp) }
         return "ipad"   // default (covers iPads and unknown UDIDs)
     }
 
+    /// The account's apps grouped by app, each with the device(s) it's installed on.
+    func appsGrouped(_ appleID: String) -> [(key: String, name: String, devices: [TrackedApp])] {
+        let g = Dictionary(grouping: tracked.filter { $0.appleID == appleID }, by: { $0.origBundleID })
+        return g.keys.sorted().map { k in
+            (key: k, name: g[k]!.first!.name, devices: g[k]!.sorted { $0.udid < $1.udid })
+        }
+    }
+
     func refreshApp(_ t: TrackedApp) {
         installing = true; status = "Refreshing \(t.name) on \(t.deviceName.isEmpty ? "device" : t.deviceName)…"
         Task.detached { [weak self] in
@@ -279,6 +287,17 @@ struct ContentView: View {
     @StateObject private var m = AppModel()
     @State private var accountsExpanded = true
     @State private var installExpanded = true
+    @State private var collapsedAccounts = Set<String>()   // ids stored when COLLAPSED (default expanded)
+    @State private var collapsedApps = Set<String>()
+
+    private func accBinding(_ id: String) -> Binding<Bool> {
+        Binding(get: { !collapsedAccounts.contains(id) },
+                set: { collapsedAccounts = $0 ? collapsedAccounts.subtracting([id]) : collapsedAccounts.union([id]) })
+    }
+    private func appBinding(_ id: String) -> Binding<Bool> {
+        Binding(get: { !collapsedApps.contains(id) },
+                set: { collapsedApps = $0 ? collapsedApps.subtracting([id]) : collapsedApps.union([id]) })
+    }
 
     var body: some View {
         VStack(alignment: .leading, spacing: 12) {
@@ -292,7 +311,37 @@ struct ContentView: View {
             if m.accounts.isEmpty { Text("No accounts yet — add one below.").font(.caption).foregroundStyle(.secondary) }
             ForEach(m.accounts) { acc in
                 let used = m.tracked.filter { $0.appleID == acc.appleID }.count
-                VStack(alignment: .leading, spacing: 3) {
+                DisclosureGroup(isExpanded: accBinding(acc.appleID)) {
+                    VStack(alignment: .leading, spacing: 4) {
+                        ForEach(m.appsGrouped(acc.appleID), id: \.key) { grp in
+                            DisclosureGroup(isExpanded: appBinding("\(acc.appleID)/\(grp.key)")) {
+                                VStack(alignment: .leading, spacing: 3) {
+                                    ForEach(grp.devices) { t in
+                                        let devLabel = t.deviceName.isEmpty ? t.udid : t.deviceName
+                                        HStack(spacing: 5) {
+                                            Image(systemName: m.deviceIcon(devLabel)).foregroundStyle(.secondary)
+                                            VStack(alignment: .leading, spacing: 0) {
+                                                Text(devLabel).font(.callout)
+                                                Text(m.expiryText(t)).font(.caption2)
+                                                    .foregroundStyle((t.secondsUntilExpiry ?? 1) <= 0 ? .red : .secondary)
+                                            }
+                                            Spacer()
+                                            Button("Refresh") { m.refreshApp(t) }.controlSize(.small).disabled(m.installing)
+                                            Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
+                                                .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
+                                        }
+                                        .padding(.leading, 6)
+                                    }
+                                }
+                            } label: {
+                                HStack(spacing: 6) {
+                                    Image(systemName: "app").foregroundStyle(.secondary)
+                                    Text(grp.name).font(.callout)
+                                }
+                            }
+                        }
+                    }.padding(.leading, 10)
+                } label: {
                     HStack {
                         Image(systemName: "person.crop.circle")
                         VStack(alignment: .leading, spacing: 0) {
@@ -305,27 +354,6 @@ struct ContentView: View {
                         Spacer()
                         Button { m.removeAccount(acc.appleID) } label: { Image(systemName: "person.badge.minus") }
                             .buttonStyle(.borderless).help("Remove this account")
-                    }
-                    ForEach(m.tracked.filter { $0.appleID == acc.appleID }) { t in
-                        let devLabel = t.deviceName.isEmpty ? t.udid : t.deviceName
-                        VStack(alignment: .leading, spacing: 2) {
-                            HStack(spacing: 6) {
-                                Image(systemName: "app").foregroundStyle(.secondary)
-                                Text(t.name).font(.callout)
-                                Spacer()
-                                Button("Refresh") { m.refreshApp(t) }.controlSize(.small).disabled(m.installing)
-                                Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
-                                    .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
-                            }
-                            HStack(spacing: 5) {
-                                Image(systemName: m.deviceIcon(devLabel)).font(.caption2).foregroundStyle(.secondary)
-                                Text("\(devLabel) · \(m.expiryText(t))")
-                                    .font(.caption2)
-                                    .foregroundStyle((t.secondsUntilExpiry ?? 1) <= 0 ? .red : .secondary)
-                            }
-                            .padding(.leading, 16)
-                        }
-                        .padding(.leading, 14)
                     }
                 }
             }
