@@ -338,7 +338,8 @@ struct ContentView: View {
                                                     .foregroundStyle((t.secondsUntilExpiry ?? 1) <= 0 ? .red : .secondary)
                                             }
                                             Spacer()
-                                            Button("Refresh") { m.refreshApp(t) }.controlSize(.small).disabled(m.installing)
+                                            Button { m.refreshApp(t) } label: { Image(systemName: "arrow.clockwise") }
+                                                .buttonStyle(.borderless).help("Re-sign & reinstall on this device").disabled(m.installing)
                                             Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
                                                 .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
                                         }
