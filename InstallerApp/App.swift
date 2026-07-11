@@ -342,7 +342,7 @@ struct ContentView: View {
                                             Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
                                                 .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
                                         }
-                                        .padding(.leading, 6)
+                                        .padding(.leading, 22)
                                     }
                                 }
                             } label: {
@@ -442,6 +442,7 @@ struct ContentView: View {
         }
         .padding(20)
         .frame(width: 440)
+        .focusEffectDisabled()   // no stray blue keyboard-focus ring when the popover opens
         .onAppear { m.loadAccountInfo() }
         .confirmationDialog("Which Apple account?", isPresented: $m.showAccountPicker, titleVisibility: .visible) {
             ForEach(m.accounts) { acc in Button(acc.displayName) { m.chooseAccount(acc.appleID) } }
