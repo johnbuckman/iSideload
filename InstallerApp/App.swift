@@ -485,7 +485,9 @@ private struct ContentHeightKey: PreferenceKey {
 }
 
 struct RootPanel: View {
-    @State private var contentHeight: CGFloat = 0
+    // Start with a sensible height so the window is never 0-tall before the first
+    // measurement lands (a 0 frame makes the popover open empty/invisible).
+    @State private var contentHeight: CGFloat = 560
     private var maxHeight: CGFloat { (NSScreen.main?.visibleFrame.height ?? 900) - 48 }
     var body: some View {
         ScrollView {
@@ -494,8 +496,10 @@ struct RootPanel: View {
                     Color.clear.preference(key: ContentHeightKey.self, value: g.size.height)
                 })
         }
-        .frame(width: 470, height: min(contentHeight, maxHeight))
-        .onPreferenceChange(ContentHeightKey.self) { contentHeight = $0 }
+        .frame(width: 470, height: min(max(contentHeight, 120), maxHeight))
+        .onPreferenceChange(ContentHeightKey.self) { h in
+            if h > 1 { contentHeight = h }
+        }
         .background(Color.white)
         .environment(\.colorScheme, .light)   // pure-white page, readable in dark mode too
     }
