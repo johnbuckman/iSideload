@@ -330,8 +330,8 @@ struct ContentView: View {
                                 VStack(alignment: .leading, spacing: 3) {
                                     ForEach(grp.devices) { t in
                                         let devLabel = t.deviceName.isEmpty ? t.udid : t.deviceName
-                                        HStack(spacing: 5) {
-                                            Image(systemName: m.deviceIcon(devLabel)).foregroundStyle(.secondary)
+                                        HStack(alignment: .top, spacing: 6) {
+                                            Image(systemName: m.deviceIcon(devLabel)).frame(width: 20).foregroundStyle(.secondary)
                                             VStack(alignment: .leading, spacing: 0) {
                                                 Text(devLabel).font(.callout)
                                                 Text(m.expiryText(t)).font(.caption2)
@@ -342,20 +342,20 @@ struct ContentView: View {
                                             Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
                                                 .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
                                         }
-                                        .padding(.leading, 22)
+                                        .padding(.leading, 26)
                                     }
                                 }
                             } label: {
                                 HStack(spacing: 6) {
-                                    Image(systemName: "app").foregroundStyle(.secondary)
+                                    Image(systemName: "square.grid.2x2.fill").frame(width: 20).foregroundStyle(.secondary)
                                     Text(grp.name).font(.callout)
                                 }
                             }
                         }
-                    }.padding(.leading, 10)
+                    }.padding(.leading, 14)
                 } label: {
-                    HStack {
-                        Image(systemName: "person.crop.circle")
+                    HStack(alignment: .top, spacing: 6) {
+                        Image(systemName: "person.crop.circle").frame(width: 20)
                         VStack(alignment: .leading, spacing: 0) {
                             Text(acc.displayName).font(.callout)
                             HStack(spacing: 6) {
