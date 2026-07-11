@@ -34,9 +34,10 @@ swift build --product InstallerApp     # the menu-bar app
 swift build --product Provision         # the CLI (install / refresh)
 ```
 
-`./bundle-app.sh` builds and bundles the menu-bar app into `iSideload.app`.
-Installing to a device requires [`pymobiledevice3`](https://github.com/doronz88/pymobiledevice3)
-(`pip install pymobiledevice3`).
+`./bundle-app.sh` builds and bundles the menu-bar app into `iSideload.app`. The
+device tools (a small [libimobiledevice](https://github.com/libimobiledevice/libimobiledevice)
+helper in [`Helpers/idevice`](Helpers)) are bundled in the app, so it's
+**self-contained** — no Python or external tools required at runtime.
 
 ## Credits & license
 

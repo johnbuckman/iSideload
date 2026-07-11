@@ -11,6 +11,8 @@ mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources"
 cp "$BINDIR/InstallerApp" "$APP/Contents/MacOS/iSideload"
 cp -R "$BINDIR/OpenSSL.framework" "$APP/Contents/MacOS/OpenSSL.framework"
 cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+mkdir -p "$APP/Contents/Helpers"
+cp -R Helpers/idevice "$APP/Contents/Helpers/idevice"   # libimobiledevice device tools (no Python)
 
 cat > "$APP/Contents/Info.plist" <<'PLIST'
 <?xml version="1.0" encoding="UTF-8"?>

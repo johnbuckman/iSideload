@@ -79,6 +79,22 @@ public struct AccountRecord: Codable, Identifiable, Sendable {
     }
 }
 
+extension AccountRecord {
+    // Lenient decode so records written before teamType/teamName still load.
+    enum CodingKeys: String, CodingKey { case dsid, authToken, appleID, identifier, firstName, lastName, teamType, teamName }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        dsid = try c.decode(String.self, forKey: .dsid)
+        authToken = try c.decode(String.self, forKey: .authToken)
+        appleID = try c.decode(String.self, forKey: .appleID)
+        identifier = try c.decode(String.self, forKey: .identifier)
+        firstName = try c.decode(String.self, forKey: .firstName)
+        lastName = try c.decode(String.self, forKey: .lastName)
+        teamType = try c.decodeIfPresent(Int.self, forKey: .teamType) ?? -1
+        teamName = try c.decodeIfPresent(String.self, forKey: .teamName) ?? ""
+    }
+}
+
 public enum AccountStore {
     static let path = iSideloadSupportDir + "/accounts.json"
     public static func records() -> [AccountRecord] {
@@ -208,6 +224,24 @@ public struct TrackedApp: Codable, Identifiable {
     }
 }
 
+extension TrackedApp {
+    // Lenient decode so entries written before the newer fields still load.
+    enum CodingKeys: String, CodingKey { case name, origBundleID, source, installedBundleID, appleID, udid, deviceName, validityDays, appIDIdentifier, lastInstalled }
+    public init(from decoder: Decoder) throws {
+        let c = try decoder.container(keyedBy: CodingKeys.self)
+        name = try c.decode(String.self, forKey: .name)
+        origBundleID = try c.decode(String.self, forKey: .origBundleID)
+        source = try c.decode(String.self, forKey: .source)
+        installedBundleID = try c.decode(String.self, forKey: .installedBundleID)
+        appleID = try c.decodeIfPresent(String.self, forKey: .appleID) ?? ""
+        udid = try c.decodeIfPresent(String.self, forKey: .udid) ?? ""
+        deviceName = try c.decodeIfPresent(String.self, forKey: .deviceName) ?? ""
+        validityDays = try c.decodeIfPresent(Int.self, forKey: .validityDays) ?? 7
+        appIDIdentifier = try c.decodeIfPresent(String.self, forKey: .appIDIdentifier) ?? ""
+        lastInstalled = try c.decodeIfPresent(Double.self, forKey: .lastInstalled)
+    }
+}
+
 public enum Tracked {
     static let path = iSideloadSupportDir + "/tracked.json"
     public static func all() -> [TrackedApp] {
@@ -253,16 +287,16 @@ public struct Sideloader {
         let r = s.lowercased().unicodeScalars.filter { CharacterSet.alphanumerics.contains($0) }.map(String.init).joined()
         return r.isEmpty ? "app" : r
     }
-    static func pythonPath() -> String {
-        ["/Library/Frameworks/Python.framework/Versions/3.11/bin/python3",
-         "/opt/homebrew/bin/python3", "/usr/local/bin/python3", "/usr/bin/python3"]
-            .first { FileManager.default.isExecutableFile(atPath: $0) } ?? "/usr/bin/python3"
+    /// The bundled libimobiledevice helper (device list/install/uninstall). No Python needed.
+    static func helperPath() -> String {
+        let bundled = Bundle.main.bundleURL.appendingPathComponent("Contents/Helpers/idevice/idevicehelper").path
+        if FileManager.default.isExecutableFile(atPath: bundled) { return bundled }
+        return NSString(string: "~/altstore-fork/imd/dist/idevice/idevicehelper").expandingTildeInPath  // dev fallback
     }
 
     /// Connected iOS devices as (udid, name). Empty if none / tooling missing.
     public static func connectedDevices() -> [(udid: String, name: String)] {
-        let script = NSString(string: "~/iwish/install-tools/listdevices.py").expandingTildeInPath
-        guard let out = try? run(pythonPath(), [script]) else { return [] }
+        guard let out = try? run(helperPath(), ["list"]) else { return [] }
         func isUDID(_ s: String) -> Bool {
             s.allSatisfy { $0.isHexDigit || $0 == "-" } && (s.count == 40 || (s.count == 25 && s.contains("-")))
         }
@@ -405,8 +439,7 @@ public struct Sideloader {
         let ipa = work.appendingPathComponent("out.ipa")
         try run("/usr/bin/zip", ["-qXr9", ipa.path, "Payload"], cwd: work)
 
-        let py = NSString(string: "~/iwish/install-tools/lockinstall.py").expandingTildeInPath
-        let out = try run(pythonPath(), [py, ipa.path], cwd: work, env: ["IWISH_UDID": iPadUDID])
+        let out = try run(helperPath(), ["install", iPadUDID, ipa.path], cwd: work)
         log("install: \(out.split(separator: "\n").last.map(String.init) ?? out)")
         guard out.contains("INSTALL OK") else { throw SideErr.fail("install failed: \(out.suffix(160))") }
 
@@ -474,8 +507,7 @@ public struct Sideloader {
 
     /// Uninstall from the device, delete its App ID (frees a free-account slot), untrack.
     public static func removeApp(_ t: TrackedApp, log: @escaping (String) -> Void) async {
-        let py = NSString(string: "~/iwish/install-tools/lockuninstall.py").expandingTildeInPath
-        let out = (try? run(pythonPath(), [py, t.installedBundleID], env: ["IWISH_UDID": t.udid])) ?? ""
+        let out = (try? run(helperPath(), ["uninstall", t.udid, t.installedBundleID])) ?? ""
         log("uninstall: \(out.split(separator: "\n").last.map(String.init) ?? out)")
         if let (account, session) = AccountStore.session(for: t.appleID),
            let teams: [ALTTeam] = try? await cont({ ALTAppleAPI.sharedAPI.fetchTeams(for: account, session: session, completionHandler: $0) }),

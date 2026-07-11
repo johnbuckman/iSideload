@@ -259,8 +259,9 @@ another Apple ID) to make room.
 - **Signing** uses **zsign**, which produces a modern **SHA-256 CodeDirectory** —
   the format iOS 16–26 require (the older `ldid` used by some tools produces a
   SHA-1 signature that newer iOS rejects).
-- **Installation** goes over the lockdown/`usbmux` protocol via
-  `pymobiledevice3` — the same channel Finder uses.
+- **Installation** goes over the lockdown/`usbmux` protocol via a small bundled
+  **libimobiledevice** helper — the same channel Finder uses. Everything ships
+  inside the app; no Python or external tools are required.
 - One **certificate is reused per account** (persisted locally), so re-signing one
   app doesn't invalidate your others.
 
