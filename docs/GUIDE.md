@@ -134,6 +134,11 @@ login"** so it's always running and can keep your apps refreshed.
   to the phone number on the account. Enter the code.
 - On success the account appears with its type badge and slot count.
 
+You can add **as many Apple IDs as you like**, and **each account has its own
+separate install limit** — a free account is capped at 3 apps *individually*, so
+2 accounts let you install 6, 3 accounts 9, and so on. When you install, iSideload
+asks which account to use; pick one that still has a free slot.
+
 > Your password is only used to talk to Apple and is stored in the macOS Keychain
 > so the app can refresh unattended. It is never written in plain text.
 
