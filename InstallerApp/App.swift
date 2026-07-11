@@ -537,5 +537,6 @@ struct RootPanel: View {
         }
         .background(Color.white)
         .environment(\.colorScheme, .light)   // pure-white page, readable in dark mode too
+        .focusEffectDisabled()                // kill the stray blue focus ring at the window level too
     }
 }
