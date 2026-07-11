@@ -113,10 +113,16 @@ path.)
 ## 5. Install iSideload on your Mac
 
 1. Open the downloaded `.dmg` and drag **iSideload** into your **Applications**
-   folder.
+   folder. The app is **signed with a Developer ID and notarized by Apple**, so it
+   opens normally — you do *not* need the right-click → "Open" Gatekeeper
+   workaround.
 2. Launch it. iSideload is a **menu-bar app** — it doesn't appear in the Dock;
    look for the **crate icon in your menu bar** (top-right). Click it to open the
-   panel.
+   panel. The panel grows and shrinks to fit its contents as you expand or collapse
+   sections.
+
+> **Requirements:** macOS 14 (Sonoma) or newer, Apple Silicon. This is an early
+> **0.1 alpha** — please report anything rough.
 
 Optionally, in the panel's **Settings** section, enable **"Launch iSideload at
 login"** so it's always running and can keep your apps refreshed.

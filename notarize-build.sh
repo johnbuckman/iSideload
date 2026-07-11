@@ -1,0 +1,79 @@
+#!/bin/bash
+# Build a Developer-ID-signed, hardened-runtime iSideload.app and a signed DMG,
+# ready to submit to Apple's notary service.
+#
+#   ./notarize-build.sh [output-dir]      default output dir: ./dist
+#
+# After this runs, notarize + staple with:
+#   xcrun notarytool submit dist/iSideload-0.1-alpha.dmg --keychain-profile <profile> --wait
+#   xcrun stapler staple dist/iSideload-0.1-alpha.dmg
+set -euo pipefail
+cd "$(dirname "$0")"
+
+IDENTITY="${ISIDELOAD_IDENTITY:-Developer ID Application: Vid Tadel (XLS3XF57J8)}"
+VERSION="0.1"
+LABEL="0.1 alpha"
+OUT="${1:-./dist}"
+ENT="$PWD/iSideload.entitlements"
+
+echo "==> Building InstallerApp"
+swift build --product InstallerApp -c release >/dev/null 2>&1 || swift build --product InstallerApp
+BINDIR=$(swift build --product InstallerApp -c release --show-bin-path 2>/dev/null || swift build --show-bin-path)
+
+STAGE=$(mktemp -d)
+APP="$STAGE/iSideload.app"
+mkdir -p "$APP/Contents/MacOS" "$APP/Contents/Resources" "$APP/Contents/Helpers"
+cp "$BINDIR/InstallerApp" "$APP/Contents/MacOS/iSideload"
+cp -R "$BINDIR/OpenSSL.framework" "$APP/Contents/MacOS/OpenSSL.framework"
+[ -f icon/AppIcon.icns ] && cp icon/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+[ -f /Users/john/altstore-fork/AppIcon.icns ] && cp /Users/john/altstore-fork/AppIcon.icns "$APP/Contents/Resources/AppIcon.icns"
+cp -R Helpers/idevice "$APP/Contents/Helpers/idevice"
+
+cat > "$APP/Contents/Info.plist" <<PLIST
+<?xml version="1.0" encoding="UTF-8"?>
+<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" "http://www.apple.com/DTDs/PropertyList-1.0.dtd">
+<plist version="1.0"><dict>
+  <key>CFBundleName</key><string>iSideload</string>
+  <key>CFBundleDisplayName</key><string>iSideload</string>
+  <key>CFBundleIdentifier</key><string>com.decent.isideload</string>
+  <key>CFBundleExecutable</key><string>iSideload</string>
+  <key>CFBundleIconFile</key><string>AppIcon</string>
+  <key>CFBundlePackageType</key><string>APPL</string>
+  <key>CFBundleVersion</key><string>$VERSION</string>
+  <key>CFBundleShortVersionString</key><string>$VERSION</string>
+  <key>LSMinimumSystemVersion</key><string>14.0</string>
+  <key>NSPrincipalClass</key><string>NSApplication</string>
+  <key>NSHighResolutionCapable</key><true/>
+  <key>LSUIElement</key><true/>
+</dict></plist>
+PLIST
+
+SIGN() { codesign --force --options runtime --timestamp -s "$IDENTITY" "$@"; }
+
+echo "==> Signing nested code (deepest first) with: $IDENTITY"
+# bundled libimobiledevice/openssl dylibs used by the device helper
+for dylib in "$APP"/Contents/Helpers/idevice/*.dylib; do SIGN "$dylib"; done
+# the device helper executable
+SIGN --entitlements "$ENT" "$APP/Contents/Helpers/idevice/idevicehelper"
+# OpenSSL framework linked by the app
+SIGN "$APP/Contents/MacOS/OpenSSL.framework/Versions/A/OpenSSL"
+SIGN "$APP/Contents/MacOS/OpenSSL.framework"
+# finally the app bundle itself
+SIGN --entitlements "$ENT" "$APP"
+
+echo "==> Verifying signature"
+codesign --verify --deep --strict --verbose=2 "$APP"
+
+mkdir -p "$OUT"
+DMG="$OUT/iSideload-0.1-alpha.dmg"
+rm -f "$DMG"
+DMGSTAGE=$(mktemp -d)
+cp -R "$APP" "$DMGSTAGE/iSideload.app"
+ln -s /Applications "$DMGSTAGE/Applications"
+echo "==> Building DMG: $DMG"
+hdiutil create -volname "iSideload $LABEL" -srcfolder "$DMGSTAGE" -ov -format UDZO "$DMG" >/dev/null
+codesign --force --timestamp -s "$IDENTITY" "$DMG"
+
+rm -rf "$STAGE" "$DMGSTAGE"
+echo "==> Done: $DMG"
+echo "    Next: notarytool submit \"$DMG\" --keychain-profile <profile> --wait && stapler staple \"$DMG\""

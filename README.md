@@ -7,6 +7,15 @@ AltStore/SideStore that signs on the Mac.
 > **New to sideloading?** Read the **[full step-by-step guide](docs/GUIDE.md)** —
 > what to do on your iPhone/iPad, what to download, and the real benefits & limits.
 
+## Download
+
+**[⬇︎ iSideload 0.1 alpha (notarized `.dmg`)](https://github.com/johnbuckman/iSideload/releases/latest)** — macOS 14 (Sonoma) or newer, Apple Silicon.
+
+Open the `.dmg` and drag **iSideload** to **Applications**. It's signed with a
+Developer ID and notarized by Apple, so it opens normally — no right-click /
+"Open Anyway" dance. iSideload runs in the **menu bar** (no Dock icon); click the
+crate icon to open the panel. This is an **early alpha** — expect rough edges.
+
 ## What it does
 
 - **Sign in with one or more Apple IDs** (free or paid). Login, 2-factor
@@ -17,11 +26,16 @@ AltStore/SideStore that signs on the Mac.
 - Apps are signed with a **SHA-256 CodeDirectory via [zsign]** (the format iOS
   16–26 accept) using Apple's `codesign`-equivalent path, then installed over the
   lockdown/`usbmux` protocol.
-- **Keeps apps alive**: a background agent re-signs and reinstalls before the
-  7-day free-provisioning expiry — on a timer and whenever you plug a device in.
+- **Keeps apps alive** with no separate background program: iSideload re-signs and
+  reinstalls before the 7-day free-provisioning expiry — on a timer, the moment you
+  plug a device in, and (near expiry) by re-checking **every 5 minutes** and pushing
+  as soon as the device is reachable over USB or Wi-Fi. It **launches at login by
+  default** so this happens unattended.
 - **Manage everything from the menu bar**: multiple accounts (each free ID gives
-  3 app slots), which apps are installed on which device, when each expires, a
-  per-app **Refresh**, and a **–** that uninstalls an app and frees its slot.
+  3 app slots, shown as a live `slots N/3`), grouped by account → app → device with
+  collapsible sections and a panel that **auto-sizes to its contents**. Each device
+  row has a circular-arrow **Refresh** (re-sign + reinstall now) and a **–** that
+  uninstalls the app and frees its slot.
 
 Free Apple IDs (create one at <https://icloud.com>) can install **3 apps**; a
 $99/year Apple Developer subscription removes that limit and extends signing to
