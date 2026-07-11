@@ -324,7 +324,7 @@ struct ContentView: View {
             ForEach(m.accounts) { acc in
                 let used = m.tracked.filter { $0.appleID == acc.appleID }.count
                 DisclosureGroup(isExpanded: accBinding(acc.appleID)) {
-                    VStack(alignment: .leading, spacing: 4) {
+                    VStack(alignment: .leading, spacing: 4) {  // FirstLineDisclosureStyle: chevron on the name line
                         ForEach(m.appsGrouped(acc.appleID), id: \.key) { grp in
                             DisclosureGroup(isExpanded: appBinding("\(acc.appleID)/\(grp.key)")) {
                                 VStack(alignment: .leading, spacing: 3) {
@@ -369,6 +369,7 @@ struct ContentView: View {
                             .buttonStyle(.borderless).help("Remove this account")
                     }
                 }
+                .disclosureGroupStyle(FirstLineDisclosureStyle())
             }
 
             if m.addingAccount || m.accounts.isEmpty {
@@ -479,6 +480,40 @@ struct InstallerApp: App {
 // Measures the intrinsic height of the content and sizes the window to fit it, so
 // the panel grows/shrinks as sections expand or collapse. A ScrollView only kicks
 // in (showing its bar) when the content would be taller than the screen.
+// Like the built-in disclosure group, but the chevron sits on the FIRST line of a
+// multi-line label (baseline-aligned to it) instead of centered over both lines.
+// Content is indented to match the native layout so surrounding alignment is unchanged.
+struct FirstLineDisclosureStyle: DisclosureGroupStyle {
+    func makeBody(configuration: Configuration) -> some View {
+        FirstLineDisclosureView(configuration: configuration)
+    }
+}
+
+private struct FirstLineDisclosureView: View {
+    let configuration: DisclosureGroupStyleConfiguration
+    var body: some View {
+        VStack(alignment: .leading, spacing: 4) {
+            HStack(alignment: .firstTextBaseline, spacing: 4) {
+                Button {
+                    withAnimation(.easeInOut(duration: 0.15)) { configuration.isExpanded.toggle() }
+                } label: {
+                    Image(systemName: "chevron.right")
+                        .font(.caption.weight(.semibold))
+                        .foregroundStyle(.secondary)
+                        .rotationEffect(.degrees(configuration.isExpanded ? 90 : 0))
+                        .frame(width: 10)
+                        .contentShape(Rectangle())
+                }
+                .buttonStyle(.plain)
+                configuration.label
+            }
+            if configuration.isExpanded {
+                configuration.content.padding(.leading, 16)
+            }
+        }
+    }
+}
+
 private struct ContentHeightKey: PreferenceKey {
     static var defaultValue: CGFloat = 0
     static func reduce(value: inout CGFloat, nextValue: () -> CGFloat) { value = nextValue() }
