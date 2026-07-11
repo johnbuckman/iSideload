@@ -222,6 +222,13 @@ enum InstallKind { case ipa(String), source(SourceApp) }
         return days >= 1 ? "expires in \(days) day\(days == 1 ? "" : "s")" : "expires in <1 day"
     }
 
+    func deviceIcon(_ name: String) -> String {
+        let l = name.lowercased()
+        if l.contains("iphone") { return "iphone" }
+        if l.contains("ipod") { return "ipodtouch" }
+        return "ipad"   // default (covers iPads and unknown UDIDs)
+    }
+
     func refreshApp(_ t: TrackedApp) {
         installing = true; status = "Refreshing \(t.name) on \(t.deviceName.isEmpty ? "device" : t.deviceName)…"
         Task.detached { [weak self] in
@@ -297,19 +304,25 @@ struct ContentView: View {
                             .buttonStyle(.borderless).help("Remove this account")
                     }
                     ForEach(m.tracked.filter { $0.appleID == acc.appleID }) { t in
-                        HStack {
-                            VStack(alignment: .leading, spacing: 0) {
+                        let devLabel = t.deviceName.isEmpty ? t.udid : t.deviceName
+                        VStack(alignment: .leading, spacing: 2) {
+                            HStack(spacing: 6) {
+                                Image(systemName: "app").foregroundStyle(.secondary)
                                 Text(t.name).font(.callout)
-                                Text("\(t.deviceName.isEmpty ? t.udid : t.deviceName) · \(m.expiryText(t))")
+                                Spacer()
+                                Button("Refresh") { m.refreshApp(t) }.controlSize(.small).disabled(m.installing)
+                                Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
+                                    .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
+                            }
+                            HStack(spacing: 5) {
+                                Image(systemName: m.deviceIcon(devLabel)).font(.caption2).foregroundStyle(.secondary)
+                                Text("\(devLabel) · \(m.expiryText(t))")
                                     .font(.caption2)
                                     .foregroundStyle((t.secondsUntilExpiry ?? 1) <= 0 ? .red : .secondary)
                             }
-                            Spacer()
-                            Button("Refresh") { m.refreshApp(t) }.controlSize(.small).disabled(m.installing)
-                            Button { m.removeApp(t) } label: { Image(systemName: "minus.circle") }
-                                .buttonStyle(.borderless).help("Uninstall & free the slot").disabled(m.installing)
+                            .padding(.leading, 16)
                         }
-                        .padding(.leading, 20)
+                        .padding(.leading, 14)
                     }
                 }
             }
@@ -398,7 +411,10 @@ struct InstallerApp: App {
     init() { installDiagnosticsLog(); RefreshDaemon.shared.start() }
     var body: some Scene {
         MenuBarExtra("iSideload", systemImage: "shippingbox") {
-            ScrollView { ContentView() }.frame(width: 470, height: 660)
+            ScrollView { ContentView() }
+                .frame(width: 470, height: 660)
+                .background(Color.white)
+                .environment(\.colorScheme, .light)   // pure-white page, readable in dark mode too
         }
         .menuBarExtraStyle(.window)
     }
