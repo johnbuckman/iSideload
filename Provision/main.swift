@@ -25,6 +25,22 @@ func withSaved(_ work: @escaping (ALTAccount, ALTAppleAPISession) async -> Void)
     sem.wait()
 }
 
+if let i = args.firstIndex(of: "--inspect"), i + 1 < args.count {
+    let info = IPAInspector.inspect(args[i + 1])
+    print("name=\(info.appName)  bundleID=\(info.bundleID)  version=\(info.version)")
+    print("signer=\(info.signer.rawValue)  otaCapable=\(info.otaCapable)")
+    exit(0)
+}
+
+if let i = args.firstIndex(of: "--ota"), i + 1 < args.count {
+    let info = IPAInspector.inspect(args[i + 1])
+    do {
+        let url = try OTAHost.shared.start(ipaPath: args[i + 1], info: info)
+        errln(">>> OTA host serving \(url)  (\(info.appName), \(info.signer.rawValue))")
+        RunLoop.main.run()
+    } catch { errln(">>> OTA host failed: \(error)"); exit(1) }
+}
+
 if args.contains("--refresh") {
     Task {
         do { try await Sideloader.refreshAll(log: { errln("· \($0)") }); errln(">>> refresh done") }

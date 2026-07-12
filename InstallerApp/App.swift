@@ -9,6 +9,7 @@ import AppKit
 import ServiceManagement
 import UniformTypeIdentifiers
 import Foundation
+import CoreImage
 
 // In-app refresh scheduler — replaces the external LaunchAgents. Runs while the
 // app is alive in the menu bar: refreshes on device-connect and on a ~2h timer
@@ -158,7 +159,7 @@ enum InstallKind { case ipa(String), source(SourceApp) }
         if let ipa = UTType(filenameExtension: "ipa") { types.insert(ipa, at: 0) }
         panel.allowedContentTypes = types
         panel.prompt = "Install"
-        if panel.runModal() == .OK, let url = panel.url { startInstall(.ipa(url.path)) }
+        if panel.runModal() == .OK, let url = panel.url { openIPA(url.path) }
     }
     func pickJSON() {
         let panel = NSOpenPanel()
@@ -226,6 +227,76 @@ enum InstallKind { case ipa(String), source(SourceApp) }
             await MainActor.run { self.tracked = Tracked.all(); self.installing = false }
         }
     }
+
+    // MARK: IPA routing — USB vs QR/over-the-air (and IPA file open)
+
+    static let shared = AppModel()
+    private var qrWindow: NSWindow?
+
+    /// Entry point for a picked or double-clicked `.ipa`: inspect it, then offer the right
+    /// install path. Ad-hoc/enterprise-signed → USB **or** QR (over the air). Development-
+    /// signed → USB only, with the Developer-Mode + trust steps the user will need.
+    func openIPA(_ path: String) {
+        let info = IPAInspector.inspect(path)
+        NSApp.activate(ignoringOtherApps: true)
+        let alert = NSAlert()
+        alert.messageText = "Install “\(info.appName)”?"
+        if info.otaCapable {
+            alert.informativeText = "This app is \(info.signer == .enterprise ? "enterprise" : "ad-hoc")-signed, so it can install over the air. Show a QR code to scan on your device — nothing else to do to it — or install over USB."
+            alert.addButton(withTitle: "Show QR code (over the air)")
+            alert.addButton(withTitle: "Install via USB")
+            alert.addButton(withTitle: "Cancel")
+            switch alert.runModal() {
+            case .alertFirstButtonReturn:  startOTA(path: path, info: info)
+            case .alertSecondButtonReturn: startInstall(.ipa(path))
+            default: break
+            }
+        } else {
+            alert.informativeText = """
+            This app is development-signed, so it installs over USB. On the device you'll then:
+            1.  Enable Developer Mode — Settings ▸ Privacy & Security ▸ Developer Mode (the device restarts).
+            2.  Trust the developer — Settings ▸ General ▸ VPN & Device Management ▸ tap the Apple ID ▸ Trust.
+            It re-signs every 7 days (or yearly if the account is a paid $99 Apple ID).
+            """
+            alert.addButton(withTitle: "Install via USB")
+            alert.addButton(withTitle: "Cancel")
+            if alert.runModal() == .alertFirstButtonReturn { startInstall(.ipa(path)) }
+        }
+    }
+
+    private func startOTA(path: String, info: IPAInfo) {
+        status = "Preparing over-the-air install…"
+        Task.detached { [weak self] in
+            do {
+                let url = try OTAHost.shared.start(ipaPath: path, info: info)
+                await MainActor.run { self?.showQR(url: url, info: info); self?.status = "Scan the QR code on your iOS device." }
+            } catch {
+                await MainActor.run { self?.status = "Couldn't start the QR host: \(error.localizedDescription)" }
+            }
+        }
+    }
+
+    func qrImage(_ string: String, size: CGFloat = 300) -> NSImage? {
+        guard let filter = CIFilter(name: "CIQRCodeGenerator") else { return nil }
+        filter.setValue(string.data(using: .utf8), forKey: "inputMessage")
+        filter.setValue("M", forKey: "inputCorrectionLevel")
+        guard let ci = filter.outputImage else { return nil }
+        let scaled = ci.transformed(by: CGAffineTransform(scaleX: size / ci.extent.width, y: size / ci.extent.height))
+        let rep = NSCIImageRep(ciImage: scaled)
+        let img = NSImage(size: rep.size); img.addRepresentation(rep); return img
+    }
+
+    private func showQR(url: URL, info: IPAInfo) {
+        let host = NSHostingView(rootView: QRView(url: url, appName: info.appName))
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 540),
+                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        win.title = "Install \(info.appName) over Wi-Fi"
+        win.contentView = host; win.center(); win.isReleasedWhenClosed = false
+        win.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        qrWindow = win
+    }
+
+    func closeQR() { OTAHost.shared.stop(); qrWindow?.close(); qrWindow = nil; if status.hasPrefix("Scan") { status = "" } }
 
     // MARK: installed-apps management
 
@@ -316,8 +387,32 @@ enum InstallKind { case ipa(String), source(SourceApp) }
 }
 
 // ── UI ──
+
+/// The over-the-air install window: a QR code the user scans on their iPhone/iPad.
+struct QRView: View {
+    let url: URL
+    let appName: String
+    var body: some View {
+        VStack(spacing: 14) {
+            Text(appName).font(.title2.bold())
+            Text("Scan with your iPhone or iPad camera").font(.callout).foregroundStyle(.secondary)
+            if let img = AppModel.shared.qrImage(url.absoluteString) {
+                Image(nsImage: img).interpolation(.none).resizable()
+                    .frame(width: 280, height: 280)
+                    .padding(10).background(Color.white).cornerRadius(8)
+            }
+            Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
+                .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+            Text("Then tap **Install** on your device — nothing else to do to it. Keep iSideload open until it finishes.")
+                .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
+                .fixedSize(horizontal: false, vertical: true)
+            Button("Done") { AppModel.shared.closeQR() }.keyboardShortcut(.defaultAction)
+        }.padding(22).frame(width: 420)
+    }
+}
+
 struct ContentView: View {
-    @StateObject private var m = AppModel()
+    @ObservedObject private var m = AppModel.shared
     @State private var accountsExpanded = true
     @State private var installExpanded = true
     @State private var collapsedAccounts = Set<String>()   // ids stored when COLLAPSED (default expanded)
@@ -481,8 +576,19 @@ struct ContentView: View {
     }
 }
 
+/// Handles double-clicked `.ipa` files (via the CFBundleDocumentTypes association) by
+/// routing them into the same USB-vs-QR chooser as the in-app "Install from .ipa…" button.
+final class AppDelegate: NSObject, NSApplicationDelegate {
+    func application(_ application: NSApplication, open urls: [URL]) {
+        for u in urls where u.pathExtension.lowercased() == "ipa" {
+            Task { @MainActor in AppModel.shared.openIPA(u.path) }
+        }
+    }
+}
+
 @main
 struct InstallerApp: App {
+    @NSApplicationDelegateAdaptor(AppDelegate.self) var appDelegate
     init() {
         installDiagnosticsLog()
         RefreshDaemon.shared.start()
