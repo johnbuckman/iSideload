@@ -1,0 +1,89 @@
+// Install an .ipa to a device by its IP address DIRECTLY, bypassing usbmuxd's
+// Bonjour/mDNS discovery (which fails on mesh Wi-Fi that blocks multicast).
+// libimobiledevice already talks to network devices by connecting to a stored
+// sockaddr; we just hand-build that idevice_t ourselves and point it at the IP.
+// The pairing record is still read from usbmuxd (/var/db/lockdown/<udid>.plist),
+// so the SSL handshake works without the device being "discovered".
+//   idevice_ipinstall <udid> <ip> <ipa>
+#include <stdio.h>
+#include <stdlib.h>
+#include <string.h>
+#include <stdint.h>
+#include <sys/socket.h>
+#include <netinet/in.h>
+#include <arpa/inet.h>
+#include <unistd.h>
+struct lockdownd_service_descriptor { uint16_t port; uint8_t ssl_enabled; char* identifier; };
+
+// Mirror of libimobiledevice src/idevice.h `struct idevice_private` (stable layout).
+struct idevice_private { char *udid; uint32_t mux_id; int conn_type; void *conn_data; int version; int device_class; };
+typedef struct idevice_private* idevice_t;
+#define CONNECTION_NETWORK 2
+
+typedef void* lockdownd_client_t;
+typedef void* lockdownd_service_descriptor_t;
+typedef void* afc_client_t;
+typedef void* instproxy_client_t;
+typedef void* plist_t;
+typedef void (*instproxy_status_cb_t)(plist_t,plist_t,void*);
+
+extern void idevice_set_debug_level(int);
+extern int  idevice_new_network(idevice_t*, const char*, const char*);
+extern int  idevice_free(idevice_t);
+extern int  lockdownd_client_new_with_handshake(idevice_t, lockdownd_client_t*, const char*);
+extern int  lockdownd_start_service(lockdownd_client_t, const char*, lockdownd_service_descriptor_t*);
+extern int  lockdownd_client_free(lockdownd_client_t);
+extern int  afc_client_new(idevice_t, lockdownd_service_descriptor_t, afc_client_t*);
+extern int  afc_make_directory(afc_client_t, const char*);
+extern int  afc_file_open(afc_client_t, const char*, int, uint64_t*);
+extern int  afc_file_write(afc_client_t, uint64_t, const char*, uint32_t, uint32_t*);
+extern int  afc_file_close(afc_client_t, uint64_t);
+extern int  afc_client_free(afc_client_t);
+extern int  instproxy_client_new(idevice_t, lockdownd_service_descriptor_t, instproxy_client_t*);
+extern plist_t instproxy_client_options_new(void);
+extern int  instproxy_install(instproxy_client_t, const char*, plist_t, instproxy_status_cb_t, void*);
+extern void instproxy_client_options_free(plist_t);
+extern void instproxy_status_get_error(plist_t, char**, char**, uint64_t*);
+
+#define AFC_FOPEN_WRONLY 3
+static int g_err=0; static char g_msg[512];
+static void cb(plist_t c, plist_t s, void* u){ char*n=0,*d=0; uint64_t cc=0; instproxy_status_get_error(s,&n,&d,&cc); if(n){g_err=1; snprintf(g_msg,sizeof g_msg,"%s%s%s",n,d?": ":"",d?d:"");} if(n)free(n); if(d)free(d); }
+
+int main(int argc, char** argv){
+    if(argc<4){ fprintf(stderr,"usage: %s <udid> <ip> <ipa>\n",argv[0]); return 64; }
+    const char *udid=argv[1], *ip=argv[2], *ipa=argv[3];
+    if(getenv("IPDBG")) idevice_set_debug_level(1);
+    idevice_t d=0;
+    if(idevice_new_network(&d, udid, ip)!=0 || !d){ printf(">>> FAIL: idevice_new_network\n"); return 2; }
+
+    fprintf(stderr,"[direct-IP  udid=%s  ip=%s]\n", udid, ip);
+    lockdownd_client_t ld=0;
+    int e = lockdownd_client_new_with_handshake(d, &ld, "iSideload-ipinstall");
+    if(e!=0){ printf(">>> FAIL: lockdown handshake by IP (err %d) — device unreachable/locked or no pair record\n", e); return 2; }
+    lockdownd_service_descriptor_t afcsvc=0;
+    if(lockdownd_start_service(ld,"com.apple.afc",&afcsvc)!=0){ printf(">>> FAIL: start afc\n"); return 2; }
+    afc_client_t afc=0;
+    if(afc_client_new(d,afcsvc,&afc)!=0){ printf(">>> FAIL: afc client\n"); return 2; }
+    int mkd=afc_make_directory(afc,"PublicStaging");
+    const char* remote="PublicStaging/isideload-ip.ipa";
+    uint64_t h=0;
+    int oe=afc_file_open(afc,remote,AFC_FOPEN_WRONLY,&h);
+    if(oe!=0){ printf(">>> FAIL: afc open (mkdir=%d open=%d)  [afc err 8=perm/locked, 4=obj-not-found]\n",mkd,oe); return 2; }
+    FILE* f=fopen(ipa,"rb"); if(!f){ printf(">>> FAIL: cannot read ipa\n"); return 2; }
+    char buf[131072]; size_t r; uint64_t total=0;
+    while((r=fread(buf,1,sizeof buf,f))>0){ uint32_t off=0; while(off<r){ uint32_t wr=0;
+        if(afc_file_write(afc,h,buf+off,(uint32_t)(r-off),&wr)!=0||wr==0){ fclose(f); printf(">>> FAIL: afc write @%llu bytes\n",(unsigned long long)total); return 2; }
+        off+=wr; total+=wr; } }
+    fclose(f); afc_file_close(afc,h); afc_client_free(afc);
+    fprintf(stderr,"uploaded %llu bytes by IP; installing...\n",(unsigned long long)total);
+    lockdownd_service_descriptor_t ipsvc=0;
+    lockdownd_start_service(ld,"com.apple.mobile.installation_proxy",&ipsvc);
+    instproxy_client_t ipc=0; instproxy_client_new(d,ipsvc,&ipc);
+    plist_t opts=instproxy_client_options_new();
+    e=instproxy_install(ipc,remote,opts,cb,0);
+    instproxy_client_options_free(opts);
+    lockdownd_client_free(ld);
+    if(e==0 && !g_err){ printf(">>> DIRECT-IP INSTALL OK <<<\n"); return 0; }
+    printf(">>> DIRECT-IP INSTALL FAILED: %s (%d)\n", g_msg, e);
+    return 3;
+}

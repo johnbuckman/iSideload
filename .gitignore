@@ -38,3 +38,10 @@ xcuserdata
 /.vscode
 /.idea/workspace.xml
 dist/
+
+# WiFi-mesh experiment build artifacts (compiled locally against the debug libimobiledevice prefix)
+Helpers/idevice_ipinstall
+Helpers/idevice_ipinstall_dbg
+Helpers/idevice_ipprobe
+Helpers/idevice_netinstall
+Helpers/idevice_setwifi
