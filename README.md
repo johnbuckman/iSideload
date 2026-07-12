@@ -16,6 +16,15 @@ Developer ID and notarized by Apple, so it opens normally — no right-click /
 "Open Anyway" dance. iSideload runs in the **menu bar** (no Dock icon); click the
 crate icon to open the panel. This is an **early alpha** — expect rough edges.
 
+## Presentation
+
+A slide overview of iSideload — current state, how USB install works, the
+multi-Apple-ID and $99 paid-account benefits, the menu-bar UI, and the
+work-in-progress Wi-Fi updating — is in [`docs/`](docs):
+
+- **[iSideload.pdf](docs/iSideload.pdf)** — view in any browser
+- **[iSideload.pptx](docs/iSideload.pptx)** — editable PowerPoint
+
 ## What it does
 
 - **Sign in with one or more Apple IDs** (free or paid). Login, 2-factor

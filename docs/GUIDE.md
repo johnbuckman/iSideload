@@ -4,6 +4,9 @@ This guide walks you through everything: what iSideload is, what you need, exact
 what to do on your Mac **and** on your iPhone/iPad, and — importantly — the real
 benefits and limits so you know what you're getting into before you start.
 
+> **Prefer slides?** A visual overview is in
+> [iSideload.pdf](iSideload.pdf) / [iSideload.pptx](iSideload.pptx).
+
 ---
 
 ## 1. What iSideload is (and how it works)
