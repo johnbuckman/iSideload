@@ -5,14 +5,14 @@
 #   ./notarize-build.sh [output-dir]      default output dir: ./dist
 #
 # After this runs, notarize + staple with:
-#   xcrun notarytool submit dist/iSideload-0.1-alpha.dmg --keychain-profile <profile> --wait
-#   xcrun stapler staple dist/iSideload-0.1-alpha.dmg
+#   xcrun notarytool submit dist/iSideload-0.2-alpha.dmg --keychain-profile <profile> --wait
+#   xcrun stapler staple dist/iSideload-0.2-alpha.dmg
 set -euo pipefail
 cd "$(dirname "$0")"
 
 IDENTITY="${ISIDELOAD_IDENTITY:-Developer ID Application: Vid Tadel (XLS3XF57J8)}"
-VERSION="0.1"
-LABEL="0.1 alpha"
+VERSION="0.2"
+LABEL="0.2 alpha"
 OUT="${1:-./dist}"
 ENT="$PWD/iSideload.entitlements"
 
@@ -65,7 +65,7 @@ echo "==> Verifying signature"
 codesign --verify --deep --strict --verbose=2 "$APP"
 
 mkdir -p "$OUT"
-DMG="$OUT/iSideload-0.1-alpha.dmg"
+DMG="$OUT/iSideload-${VERSION}-alpha.dmg"
 rm -f "$DMG"
 DMGSTAGE=$(mktemp -d)
 cp -R "$APP" "$DMGSTAGE/iSideload.app"

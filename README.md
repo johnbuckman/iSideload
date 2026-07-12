@@ -9,7 +9,7 @@ AltStore/SideStore that signs on the Mac.
 
 ## Download
 
-**[⬇︎ iSideload 0.1 alpha (notarized `.dmg`)](https://github.com/johnbuckman/iSideload/releases/latest)** — macOS 14 (Sonoma) or newer, Apple Silicon.
+**[⬇︎ iSideload 0.2 alpha (notarized `.dmg`)](https://github.com/johnbuckman/iSideload/releases/latest)** — macOS 14 (Sonoma) or newer, Apple Silicon.
 
 Open the `.dmg` and drag **iSideload** to **Applications**. It's signed with a
 Developer ID and notarized by Apple, so it opens normally — no right-click /
@@ -30,6 +30,11 @@ work-in-progress Wi-Fi updating — is in [`docs/`](docs):
 - **Sign in with one or more Apple IDs** (free or paid). Login, 2-factor
   (including SMS for accounts with no trusted device), and the Apple developer
   provisioning are all handled for you.
+- **Pick which team to sign with.** If an Apple ID belongs to more than one
+  developer team (e.g. a personal free team *and* a paid company team), iSideload
+  shows a per-account **Team** menu so you choose — a free team gives 7-day
+  installs, a paid team gives 1-year. It never touches other developers'
+  certificates on a paid team.
 - **Install** an app from an AltStore-format **source URL**, a local **`.json`**
   catalog, or a single **`.ipa` / `.app`** file.
 - Apps are signed with a **SHA-256 CodeDirectory via [zsign]** (the format iOS

@@ -60,11 +60,25 @@ public enum Anisette {
 
 // MARK: - Account persistence (multiple Apple IDs; each free ID = 3 app slots)
 
+/// One Apple developer team the account belongs to. type: 3=free, 1/2=paid.
+public struct TeamInfo: Codable, Identifiable, Sendable, Hashable {
+    public var id: String       // ALTTeam.identifier
+    public var name: String
+    public var type: Int
+    public init(id: String, name: String, type: Int) { self.id = id; self.name = name; self.type = type }
+    public var isPaid: Bool { type == 1 || type == 2 }
+    public var label: String { "\(name) — \(isPaid ? "1 year" : "7 days")" }
+}
+
 public struct AccountRecord: Codable, Identifiable, Sendable {
     public var dsid, authToken, appleID, identifier, firstName, lastName: String
-    public var teamType: Int = -1      // ALTTeamType raw: 3=free, 1/2=paid
-    public var teamName: String = ""
+    public var teamType: Int = -1      // chosen team's ALTTeamType raw: 3=free, 1/2=paid
+    public var teamName: String = ""   // chosen team's name
+    public var teamID: String = ""     // chosen team's identifier (durable selection key)
+    public var teams: [TeamInfo] = []  // every team this Apple ID belongs to
     public var id: String { appleID }
+    public var teamChosen: Bool { !teamID.isEmpty }
+    public var needsTeamChoice: Bool { teams.count > 1 && teamID.isEmpty }
     public var displayName: String {
         let n = "\(firstName) \(lastName)".trimmingCharacters(in: .whitespaces)
         return n.isEmpty ? appleID : "\(n) (\(appleID))"
@@ -81,7 +95,7 @@ public struct AccountRecord: Codable, Identifiable, Sendable {
 
 extension AccountRecord {
     // Lenient decode so records written before teamType/teamName still load.
-    enum CodingKeys: String, CodingKey { case dsid, authToken, appleID, identifier, firstName, lastName, teamType, teamName }
+    enum CodingKeys: String, CodingKey { case dsid, authToken, appleID, identifier, firstName, lastName, teamType, teamName, teamID, teams }
     public init(from decoder: Decoder) throws {
         let c = try decoder.container(keyedBy: CodingKeys.self)
         dsid = try c.decode(String.self, forKey: .dsid)
@@ -92,6 +106,8 @@ extension AccountRecord {
         lastName = try c.decode(String.self, forKey: .lastName)
         teamType = try c.decodeIfPresent(Int.self, forKey: .teamType) ?? -1
         teamName = try c.decodeIfPresent(String.self, forKey: .teamName) ?? ""
+        teamID = try c.decodeIfPresent(String.self, forKey: .teamID) ?? ""
+        teams = try c.decodeIfPresent([TeamInfo].self, forKey: .teams) ?? []
     }
 }
 
@@ -117,11 +133,34 @@ public enum AccountStore {
         Keychain.clear(appleID)
         CertStore.clear(appleID)
     }
-    public static func setTeam(_ appleID: String, type: Int, name: String) {
+    /// Record every team an Apple ID belongs to. Keeps an existing valid choice; auto-picks
+    /// when there's exactly one team; leaves the choice empty (so the UI prompts) when there
+    /// are several and none has been chosen yet.
+    public static func setTeams(_ appleID: String, _ teams: [TeamInfo]) {
         var list = records()
-        if let i = list.firstIndex(where: { $0.appleID == appleID }) {
-            list[i].teamType = type; list[i].teamName = name; write(list)
+        guard let i = list.firstIndex(where: { $0.appleID == appleID }) else { return }
+        list[i].teams = teams
+        if let sel = teams.first(where: { $0.id == list[i].teamID }) {
+            list[i].teamType = sel.type; list[i].teamName = sel.name          // refresh label
+        } else if teams.count == 1, let only = teams.first {
+            list[i].teamID = only.id; list[i].teamType = only.type; list[i].teamName = only.name
+        } else {
+            list[i].teamID = ""; list[i].teamType = -1; list[i].teamName = ""  // ambiguous → prompt
         }
+        write(list)
+    }
+    /// Explicit user choice of which team to sign with.
+    public static func chooseTeam(_ appleID: String, id: String) {
+        var list = records()
+        guard let i = list.firstIndex(where: { $0.appleID == appleID }),
+              let t = list[i].teams.first(where: { $0.id == id }) else { return }
+        list[i].teamID = t.id; list[i].teamType = t.type; list[i].teamName = t.name
+        write(list)
+    }
+    /// The team identifier the user picked for this Apple ID, if any.
+    public static func chosenTeamID(for appleID: String) -> String? {
+        let id = records().first(where: { $0.appleID == appleID })?.teamID ?? ""
+        return id.isEmpty ? nil : id
     }
     /// Reconstruct (account, session) with a FRESH anisette (durable creds are dsid+authToken).
     public static func session(for appleID: String) -> (ALTAccount, ALTAppleAPISession)? {
@@ -370,9 +409,14 @@ public struct Sideloader {
             return stored
         }
         log("issuing a new certificate…")
-        for old in existing {
-            _ = try? await withCheckedThrowingContinuation { (cc: CheckedContinuation<Bool, Error>) in
-                api.revoke(old, for: team, session: session) { ok, e in ok ? cc.resume(returning: true) : cc.resume(throwing: e ?? SideErr.fail("revoke")) }
+        // Free teams allow exactly ONE dev cert, so we must revoke the old ones to stay under the
+        // limit. Paid teams (e.g. a company team) can hold many certs and those belong to other
+        // developers/machines — NEVER blanket-revoke them; just add ours alongside.
+        if team.type == .free {
+            for old in existing {
+                _ = try? await withCheckedThrowingContinuation { (cc: CheckedContinuation<Bool, Error>) in
+                    api.revoke(old, for: team, session: session) { ok, e in ok ? cc.resume(returning: true) : cc.resume(throwing: e ?? SideErr.fail("revoke")) }
+                }
             }
         }
         let newCert: ALTCertificate = try await cont { api.addCertificate(machineName: "iSideload", to: team, session: session, completionHandler: $0) }
@@ -384,6 +428,32 @@ public struct Sideloader {
         return cert
     }
 
+    /// Refresh each saved account's team list once, in the background (no device / no signing).
+    /// Populates the per-account team picker and lets the refresh daemon honor the chosen team.
+    public static func populateTeamsInBackground() {
+        Task.detached(priority: .utility) {
+            for appleID in AccountStore.appleIDs {
+                guard let (a, s) = AccountStore.session(for: appleID) else { continue }
+                let teams = await fetchTeamInfos(account: a, session: s)
+                if !teams.isEmpty { AccountStore.setTeams(appleID, teams) }
+            }
+        }
+    }
+
+    /// Every team an Apple ID belongs to, as persistable TeamInfo.
+    public static func fetchTeamInfos(account: ALTAccount, session: ALTAppleAPISession) async -> [TeamInfo] {
+        guard let teams: [ALTTeam] = try? await cont({ ALTAppleAPI.sharedAPI.fetchTeams(for: account, session: session, completionHandler: $0) }) else { return [] }
+        return teams.map { TeamInfo(id: $0.identifier, name: $0.name, type: $0.type.rawValue) }
+    }
+
+    /// Resolve which ALTTeam to sign with: the user's saved choice if present, else the old
+    /// free-preferring default (keeps single-team / pre-existing accounts working unchanged).
+    static func resolveTeam(for account: ALTAccount, from teams: [ALTTeam]) -> ALTTeam? {
+        if let id = AccountStore.chosenTeamID(for: account.appleID),
+           let t = teams.first(where: { $0.identifier == id }) { return t }
+        return teams.first(where: { $0.type == .free }) ?? teams.first
+    }
+
     @discardableResult
     public static func install(account: ALTAccount, session: ALTAppleAPISession,
                                appPath: String, source: String, iPadUDID: String,
@@ -391,7 +461,7 @@ public struct Sideloader {
         let api = ALTAppleAPI.sharedAPI
 
         let teams: [ALTTeam] = try await cont { api.fetchTeams(for: account, session: session, completionHandler: $0) }
-        guard let team = teams.first(where: { $0.type == .free }) ?? teams.first else { throw SideErr.fail("No teams on this Apple ID") }
+        guard let team = resolveTeam(for: account, from: teams) else { throw SideErr.fail("No teams on this Apple ID") }
         log("Team: \(team.name). Registering iPad…")
         let _: ALTDevice? = try? await cont { api.registerDevice(name: "iPad", identifier: iPadUDID, type: .iPad, team: team, session: session, completionHandler: $0) }
 
@@ -488,7 +558,7 @@ public struct Sideloader {
     /// Free vs paid team info for an account (for showing 7-day vs 1-year).
     public static func accountTeamInfo(account: ALTAccount, session: ALTAppleAPISession) async -> (type: Int, name: String)? {
         guard let teams: [ALTTeam] = try? await cont({ ALTAppleAPI.sharedAPI.fetchTeams(for: account, session: session, completionHandler: $0) }),
-              let team = teams.first(where: { $0.type == .free }) ?? teams.first else { return nil }
+              let team = resolveTeam(for: account, from: teams) else { return nil }
         return (team.type.rawValue, team.name)
     }
 
@@ -511,7 +581,7 @@ public struct Sideloader {
         log("uninstall: \(out.split(separator: "\n").last.map(String.init) ?? out)")
         if let (account, session) = AccountStore.session(for: t.appleID),
            let teams: [ALTTeam] = try? await cont({ ALTAppleAPI.sharedAPI.fetchTeams(for: account, session: session, completionHandler: $0) }),
-           let team = teams.first(where: { $0.type == .free }) ?? teams.first,
+           let team = resolveTeam(for: account, from: teams),
            let appIDs = try? await ALTAppleAPI.sharedAPI.fetchAppIDs(for: team, session: session),
            let appID = appIDs.first(where: { $0.identifier == t.appIDIdentifier || $0.bundleIdentifier == t.installedBundleID }) {
             _ = try? await withCheckedThrowingContinuation { (c: CheckedContinuation<Bool, Error>) in

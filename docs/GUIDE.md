@@ -87,6 +87,15 @@ This is the part people wish they'd read first.
 iSideload shows each account's type ("Free · 7 days" or "Paid · 1 year") and, for
 free accounts, a live **`slots N/3`** indicator.
 
+**If your Apple ID is in more than one team.** Some Apple IDs belong to both a
+personal **free** team *and* a **paid** team (for example, a company you develop
+for). When that's the case iSideload can't guess which one you want, so the
+account row shows a **Team** menu with a "⚠ Choose a team" prompt. Pick the team
+to sign with — the **free** team gives 7-day installs, a **paid** team gives
+1-year. Your choice is remembered per account, and you can switch teams there at
+any time. iSideload only ever adds *its own* certificate to a paid team; it never
+revokes the certificates other developers on that team rely on.
+
 ---
 
 ## 4. Prepare your iPhone/iPad (do this once)
@@ -142,6 +151,8 @@ login"** so it's always running and can keep your apps refreshed.
   dedicated sideloading ID), tick **"Text me the code"** — Apple will SMS the code
   to the phone number on the account. Enter the code.
 - On success the account appears with its type badge and slot count.
+- **If the Apple ID is in more than one team**, the row shows a **Team** menu
+  ("⚠ Choose a team") — pick free (7-day) or paid (1-year) before installing.
 
 You can add **as many Apple IDs as you like**, and **each account has its own
 separate install limit** — a free account is capped at 3 apps *individually*, so

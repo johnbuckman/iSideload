@@ -118,8 +118,13 @@ enum InstallKind { case ipa(String), source(SourceApp) }
                             self.loginStage = .idle; self.loginStatus = ""; self.addingAccount = false
                             self.status = "Added \(account.appleID)."
                             Task.detached {
-                                if let info = await Sideloader.accountTeamInfo(account: account, session: session) {
-                                    await MainActor.run { AccountStore.setTeam(account.appleID, type: info.type, name: info.name); self.accounts = AccountStore.records() }
+                                let teams = await Sideloader.fetchTeamInfos(account: account, session: session)
+                                await MainActor.run {
+                                    AccountStore.setTeams(account.appleID, teams)
+                                    self.accounts = AccountStore.records()
+                                    if teams.count > 1, AccountStore.chosenTeamID(for: account.appleID) == nil {
+                                        self.status = "\(account.appleID): pick a team below (free = 7 days, paid = 1 year)."
+                                    }
                                 }
                             }
                         }
@@ -174,10 +179,19 @@ enum InstallKind { case ipa(String), source(SourceApp) }
     func startInstall(_ kind: InstallKind) {
         guard !accounts.isEmpty else { status = "Add an Apple account first."; addingAccount = true; return }
         pendingKind = kind; chosenAppleID = nil
-        if accounts.count == 1 { chosenAppleID = accounts[0].appleID; resolveDevice() }
+        if accounts.count == 1 { guard okToInstall(accounts[0]) else { return }; chosenAppleID = accounts[0].appleID; resolveDevice() }
         else { showAccountPicker = true }
     }
-    func chooseAccount(_ id: String) { chosenAppleID = id; showAccountPicker = false; resolveDevice() }
+    func chooseAccount(_ id: String) {
+        showAccountPicker = false
+        guard let acc = accounts.first(where: { $0.appleID == id }), okToInstall(acc) else { return }
+        chosenAppleID = id; resolveDevice()
+    }
+    /// Block an install on a multi-team account until the user has chosen which team to sign with.
+    private func okToInstall(_ acc: AccountRecord) -> Bool {
+        if acc.needsTeamChoice { status = "Pick a team for \(acc.appleID) first (free = 7 days, paid = 1 year)."; return false }
+        return true
+    }
     private func resolveDevice() {
         status = "Looking for a connected device…"
         Task.detached {
@@ -216,15 +230,22 @@ enum InstallKind { case ipa(String), source(SourceApp) }
     // MARK: installed-apps management
 
     func loadAccountInfo() {
-        for acc in accounts where acc.teamType == -1 {
-            guard let (a, s) = AccountStore.session(for: acc.appleID) else { continue }
-            let id = acc.appleID
-            Task.detached {
-                if let info = await Sideloader.accountTeamInfo(account: a, session: s) {
-                    await MainActor.run { AccountStore.setTeam(id, type: info.type, name: info.name); self.accounts = AccountStore.records() }
-                }
-            }
+        for acc in accounts where acc.teams.isEmpty { refreshTeams(for: acc.appleID) }
+    }
+    /// (Re)fetch the list of teams an account belongs to, so the Team menu is populated.
+    func refreshTeams(for appleID: String) {
+        guard let (a, s) = AccountStore.session(for: appleID) else { return }
+        Task.detached {
+            let teams = await Sideloader.fetchTeamInfos(account: a, session: s)
+            guard !teams.isEmpty else { return }
+            await MainActor.run { AccountStore.setTeams(appleID, teams); self.accounts = AccountStore.records() }
         }
+    }
+    /// User picked which team to sign this account's apps with.
+    func chooseTeam(_ appleID: String, _ teamID: String) {
+        AccountStore.chooseTeam(appleID, id: teamID)
+        accounts = AccountStore.records()
+        status = "\(appleID): signing with \(accounts.first { $0.appleID == appleID }?.teamName ?? "team")."
     }
 
     func expiryText(_ t: TrackedApp) -> String {
@@ -357,12 +378,15 @@ struct ContentView: View {
                 } label: {
                     HStack(alignment: .top, spacing: 6) {
                         Image(systemName: "person.crop.circle").frame(width: 20)
-                        VStack(alignment: .leading, spacing: 0) {
+                        VStack(alignment: .leading, spacing: 2) {
                             Text(acc.displayName).font(.callout)
                             HStack(spacing: 6) {
                                 if !acc.validity.isEmpty { Text(acc.validity).foregroundStyle(acc.isPaid ? .green : .secondary) }
-                                if !acc.isPaid { Text("slots \(used)/3").foregroundStyle(used >= 3 ? .orange : .secondary) }
+                                if !acc.isPaid && acc.teamChosen { Text("slots \(used)/3").foregroundStyle(used >= 3 ? .orange : .secondary) }
                             }.font(.caption2)
+                            if acc.teams.count > 1 {
+                                TeamMenu(acc: acc) { m.chooseTeam(acc.appleID, $0) }
+                            }
                         }
                         Spacer()
                         Button { m.removeAccount(acc.appleID) } label: { Image(systemName: "person.badge.minus") }
@@ -462,6 +486,7 @@ struct InstallerApp: App {
     init() {
         installDiagnosticsLog()
         RefreshDaemon.shared.start()
+        Sideloader.populateTeamsInBackground()   // so the team picker is ready + refresh honors the choice
         // Launch at login is ON by default — register once on first run; the Settings
         // toggle can turn it off afterwards (we don't re-enable once configured).
         if !UserDefaults.standard.bool(forKey: "isideload.loginItemConfigured") {
@@ -483,6 +508,31 @@ struct InstallerApp: App {
 // Like the built-in disclosure group, but the chevron sits on the FIRST line of a
 // multi-line label (baseline-aligned to it) instead of centered over both lines.
 // Content is indented to match the native layout so surrounding alignment is unchanged.
+/// Per-account picker of which developer team (free vs paid) to sign with.
+struct TeamMenu: View {
+    let acc: AccountRecord
+    let choose: (String) -> Void
+    var body: some View {
+        Menu {
+            ForEach(acc.teams) { t in
+                Button { choose(t.id) } label: {
+                    Label(t.label, systemImage: t.id == acc.teamID ? "checkmark" : "")
+                }
+            }
+        } label: {
+            let chosen = acc.teamChosen
+            HStack(spacing: 3) {
+                Image(systemName: chosen ? "person.2" : "exclamationmark.triangle.fill")
+                Text(chosen ? "Team: \(acc.teamName)" : "Choose a team")
+            }
+            .font(.caption2)
+            .foregroundStyle(chosen ? Color.secondary : Color.orange)
+        }
+        .menuStyle(.borderlessButton)
+        .fixedSize()
+    }
+}
+
 struct FirstLineDisclosureStyle: DisclosureGroupStyle {
     func makeBody(configuration: Configuration) -> some View {
         FirstLineDisclosureView(configuration: configuration)
