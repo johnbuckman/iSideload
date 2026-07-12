@@ -72,6 +72,8 @@ General Public License v3.0** — see [`LICENSE`](LICENSE).
 The signer is **[zsign]** by zhlynn, included under the **MIT License**
 (see [`Dependencies/zsign`](Dependencies/zsign)).
 
+App screenshot:
+
 <img src="docs/isideload.png" alt="iSideload menu-bar app" width="447">
 
 [AltSign]: https://github.com/SideStore/AltSign
