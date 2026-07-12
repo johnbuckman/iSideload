@@ -4,6 +4,9 @@ A small **macOS menu-bar app** that installs and keeps iOS apps signed on your
 devices using a **free Apple ID** — a lean, self-contained alternative to
 AltStore/SideStore that signs on the Mac.
 
+> **⏱ [Read the TL;DR first](docs/TLDR.md)** — who can sideload what, and how (end users
+> and developers, free vs paid, USB vs QR). Two minutes, saves confusion.
+
 > **New to sideloading?** Read the **[full step-by-step guide](docs/GUIDE.md)** —
 > what to do on your iPhone/iPad, what to download, and the real benefits & limits.
 
