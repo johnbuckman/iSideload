@@ -8,6 +8,9 @@ It captures what works, what doesn't, every gotcha we hit, the tools built, and 
 strategic conclusions about distribution and scale. Read the numbered files in
 order for the full story, or jump to what you need.
 
+> **New here (human or AI)?** Start with [`../AI-BOOTSTRAP.md`](../AI-BOOTSTRAP.md) for a
+> fast orientation to the whole iSideload project, then come back for the wireless detail.
+
 ## TL;DR
 
 - **USB install/refresh is the reliable floor** and is required for the free-Apple-ID

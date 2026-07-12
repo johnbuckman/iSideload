@@ -7,6 +7,10 @@ AltStore/SideStore that signs on the Mac.
 > **New to sideloading?** Read the **[full step-by-step guide](docs/GUIDE.md)** —
 > what to do on your iPhone/iPad, what to download, and the real benefits & limits.
 
+> **Contributing, or an AI picking up this project?** Start with
+> **[docs/AI-BOOTSTRAP.md](docs/AI-BOOTSTRAP.md)** for a fast orientation, and see
+> **[docs/wireless/](docs/wireless/)** for the network install/refresh research.
+
 ## Download
 
 **[⬇︎ iSideload 0.2 alpha (notarized `.dmg`)](https://github.com/johnbuckman/iSideload/releases/latest)** — macOS 14 (Sonoma) or newer, Apple Silicon.
