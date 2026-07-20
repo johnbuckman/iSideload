@@ -11,8 +11,11 @@ AltStore/SideStore that signs on the Mac.
 > what to do on your iPhone/iPad, what to download, and the real benefits & limits.
 
 > **Contributing, or an AI picking up this project?** Start with
-> **[docs/AI-BOOTSTRAP.md](docs/AI-BOOTSTRAP.md)** for a fast orientation, and see
-> **[docs/wireless/](docs/wireless/)** for the network install/refresh research.
+> **[docs/AI-BOOTSTRAP.md](docs/AI-BOOTSTRAP.md)** for a fast orientation, then
+> **[docs/CURRENT-STATE.md](docs/CURRENT-STATE.md)** — the living state of the
+> wireless install/QR/progress/device-registration work, including build gotchas,
+> the ad-hoc signing recipe, and what to pick up next. See
+> **[docs/wireless/](docs/wireless/)** for the original network research.
 
 ## Download
 

@@ -4,6 +4,12 @@ You're an AI picking up the **iSideload** project. This file orients you fast: w
 is, where things live, the load-bearing facts, and how to build/test without breaking
 things. Read this, then the linked docs, then act.
 
+> **➡️ Then read [CURRENT-STATE.md](CURRENT-STATE.md).** It is the living, detailed
+> state of the wireless work (QR/OTA install, install progress, Wi-Fi device
+> registration): build gotchas that will otherwise waste your time, the ad-hoc
+> signing recipe, verified findings, test recipes, and the open items to pick up.
+> Where this file and CURRENT-STATE disagree about *current* state, trust that one.
+
 ## What iSideload is
 
 A lean, self-contained **macOS menu-bar app** that installs and keeps iOS apps signed on

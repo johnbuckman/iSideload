@@ -3,6 +3,9 @@
 #   ./bundle-app.sh [output-dir]     default output: /Applications/iSideload.app
 set -e
 cd "$(dirname "$0")"
+# Force a relink: swift build sometimes recompiles a changed module but skips
+# relinking the executable, which silently bundles a stale binary.
+rm -f "$(swift build --show-bin-path)/InstallerApp"
 swift build --product InstallerApp
 BINDIR=$(swift build --show-bin-path)
 APP="${1:-/Applications}/iSideload.app"

@@ -232,6 +232,7 @@ enum InstallKind { case ipa(String), source(SourceApp) }
 
     static let shared = AppModel()
     private var qrWindow: NSWindow?
+    private var udidWindow: NSWindow?
 
     /// Entry point for a picked or double-clicked `.ipa`: inspect it, then offer the right
     /// install path. Ad-hoc/enterprise-signed → USB **or** QR (over the air). Development-
@@ -242,7 +243,7 @@ enum InstallKind { case ipa(String), source(SourceApp) }
         let alert = NSAlert()
         alert.messageText = "Install “\(info.appName)”?"
         if info.otaCapable {
-            alert.informativeText = "This app is \(info.signer == .enterprise ? "enterprise" : "ad-hoc")-signed, so it can install over the air. Show a QR code to scan on your device — nothing else to do to it — or install over USB."
+            alert.informativeText = "This app is \(info.signer == .enterprise ? "enterprise" : "ad-hoc")-signed, so it can install over the air. Show a QR code to scan on your device — or install over USB.\(info.signer == .enterprise ? "" : " First time on a device, the user enables Developer Mode (Settings ▸ Privacy & Security ▸ Developer Mode).")"
             alert.addButton(withTitle: "Show QR code (over the air)")
             alert.addButton(withTitle: "Install via USB")
             alert.addButton(withTitle: "Cancel")
@@ -266,12 +267,26 @@ enum InstallKind { case ipa(String), source(SourceApp) }
 
     private func startOTA(path: String, info: IPAInfo) {
         status = "Preparing over-the-air install…"
+        OTAProgress.shared.reset()
+        OTAHost.shared.onProgress = { stage, sent, total in
+            Task { @MainActor in
+                let p = OTAProgress.shared; p.stage = stage; p.sent = sent; p.total = total
+            }
+        }
         Task.detached { [weak self] in
             do {
                 let url = try OTAHost.shared.start(ipaPath: path, info: info)
                 await MainActor.run { self?.showQR(url: url, info: info); self?.status = "Scan the QR code on your iOS device." }
             } catch {
-                await MainActor.run { self?.status = "Couldn't start the QR host: \(error.localizedDescription)" }
+                await MainActor.run {
+                    self?.status = "Couldn't start the QR host."
+                    let a = NSAlert()
+                    a.messageText = "Couldn't start the over-the-air install"
+                    a.informativeText = error.localizedDescription
+                    a.alertStyle = .warning
+                    NSApp.activate(ignoringOtherApps: true)
+                    a.runModal()
+                }
             }
         }
     }
@@ -288,7 +303,7 @@ enum InstallKind { case ipa(String), source(SourceApp) }
 
     private func showQR(url: URL, info: IPAInfo) {
         let host = NSHostingView(rootView: QRView(url: url, appName: info.appName))
-        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 540),
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 620),
                            styleMask: [.titled, .closable], backing: .buffered, defer: false)
         win.title = "Install \(info.appName) over Wi-Fi"
         win.contentView = host; win.center(); win.isReleasedWhenClosed = false
@@ -296,7 +311,40 @@ enum InstallKind { case ipa(String), source(SourceApp) }
         qrWindow = win
     }
 
-    func closeQR() { OTAHost.shared.stop(); qrWindow?.close(); qrWindow = nil; if status.hasPrefix("Scan") { status = "" } }
+    func closeQR() { OTAHost.shared.onProgress = nil; OTAHost.shared.stop(); OTAProgress.shared.reset(); qrWindow?.close(); qrWindow = nil; if status.hasPrefix("Scan") { status = "" } }
+
+    // MARK: capture a device UDID over Wi-Fi (Profile Service)
+    func captureUDID() {
+        status = "Starting device registration…"
+        UDIDCapture.shared.reset()
+        OTAHost.shared.onUDID = { udid, product, version in
+            Task { @MainActor in
+                let c = UDIDCapture.shared; c.udid = udid; c.product = product; c.version = version
+            }
+        }
+        Task.detached { [weak self] in
+            do {
+                let url = try OTAHost.shared.startUDIDCapture()
+                await MainActor.run { UDIDCapture.shared.url = url; self?.showUDIDWindow(url: url); self?.status = "Open the link on the device, then install the profile." }
+            } catch {
+                await MainActor.run {
+                    self?.status = ""
+                    let a = NSAlert(); a.messageText = "Couldn't start device registration"; a.informativeText = error.localizedDescription
+                    a.alertStyle = .warning; NSApp.activate(ignoringOtherApps: true); a.runModal()
+                }
+            }
+        }
+    }
+    private func showUDIDWindow(url: URL) {
+        let host = NSHostingView(rootView: UDIDCaptureView(url: url))
+        let win = NSWindow(contentRect: NSRect(x: 0, y: 0, width: 420, height: 560),
+                           styleMask: [.titled, .closable], backing: .buffered, defer: false)
+        win.title = "Register a device over Wi-Fi"
+        win.contentView = host; win.center(); win.isReleasedWhenClosed = false
+        win.makeKeyAndOrderFront(nil); NSApp.activate(ignoringOtherApps: true)
+        udidWindow = win
+    }
+    func closeUDIDCapture() { OTAHost.shared.onUDID = nil; OTAHost.shared.stop(); UDIDCapture.shared.reset(); udidWindow?.close(); udidWindow = nil; if status.hasPrefix("Open the link") { status = "" } }
 
     // MARK: installed-apps management
 
@@ -389,9 +437,77 @@ enum InstallKind { case ipa(String), source(SourceApp) }
 // ── UI ──
 
 /// The over-the-air install window: a QR code the user scans on their iPhone/iPad.
+/// Live download progress the Mac shows under the QR code. Fed by OTAHost.onProgress.
+@MainActor final class OTAProgress: ObservableObject {
+    static let shared = OTAProgress()
+    @Published var stage = "waiting"
+    @Published var sent: Int64 = 0
+    @Published var total: Int64 = 0
+    var fraction: Double { total > 0 ? min(1, Double(sent) / Double(total)) : 0 }
+    func reset() { stage = "waiting"; sent = 0; total = 0 }
+    static func mb(_ b: Int64) -> String { String(format: "%.1f MB", Double(b) / 1_048_576) }
+    var label: String {
+        switch stage {
+        case "confirmed":   return "Install confirmed — starting download…"
+        case "downloading": return "Downloading to your device…"
+        case "downloaded":  return "Download complete — installing on your device…"
+        default:            return "Waiting for you to tap Install on your device…"
+        }
+    }
+}
+
+/// Captured device identity from the Profile Service enrollment.
+@MainActor final class UDIDCapture: ObservableObject {
+    static let shared = UDIDCapture()
+    @Published var url: URL?
+    @Published var udid = ""
+    @Published var product = ""
+    @Published var version = ""
+    func reset() { url = nil; udid = ""; product = ""; version = "" }
+}
+
+/// Window that shows a QR/link to register a device and, once it reports in, its UDID.
+struct UDIDCaptureView: View {
+    let url: URL
+    @ObservedObject private var c = UDIDCapture.shared
+    var body: some View {
+        VStack(spacing: 14) {
+            Text("Register a device").font(.title2.bold())
+            if c.udid.isEmpty {
+                Text("On the iPhone or iPad, scan this (or open the link) and install the profile it offers.")
+                    .font(.callout).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                if let img = AppModel.shared.qrImage(url.absoluteString) {
+                    Image(nsImage: img).interpolation(.none).resizable()
+                        .frame(width: 250, height: 250).padding(10).background(Color.white).cornerRadius(8)
+                }
+                Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
+                    .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
+                Text("Then on the device: **Settings ▸ Profile Downloaded** (or **General ▸ VPN & Device Management**) ▸ **Install** ▸ passcode.")
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+                HStack(spacing: 6) { ProgressView().controlSize(.small); Text("Waiting for the device…").font(.caption).foregroundStyle(.secondary) }
+            } else {
+                Text("Device registered ✓").font(.headline).foregroundStyle(.green)
+                if !c.product.isEmpty { Text("\(c.product)\(c.version.isEmpty ? "" : " · iOS \(c.version)")").font(.caption).foregroundStyle(.secondary) }
+                GroupBox {
+                    HStack {
+                        Text(c.udid).font(.system(.body, design: .monospaced)).textSelection(.enabled)
+                        Button {
+                            NSPasteboard.general.clearContents(); NSPasteboard.general.setString(c.udid, forType: .string)
+                        } label: { Image(systemName: "doc.on.doc") }.buttonStyle(.borderless).help("Copy UDID")
+                    }.padding(6)
+                }
+                Text("Give me this UDID and I can register it with Apple and re-sign your apps for it.")
+                    .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center).fixedSize(horizontal: false, vertical: true)
+            }
+            Button("Done") { AppModel.shared.closeUDIDCapture() }.keyboardShortcut(.defaultAction)
+        }.padding(22).frame(width: 420)
+    }
+}
+
 struct QRView: View {
     let url: URL
     let appName: String
+    @ObservedObject private var prog = OTAProgress.shared
     var body: some View {
         VStack(spacing: 14) {
             Text(appName).font(.title2.bold())
@@ -403,9 +519,20 @@ struct QRView: View {
             }
             Text(url.absoluteString).font(.caption).foregroundStyle(.secondary)
                 .textSelection(.enabled).lineLimit(1).truncationMode(.middle)
-            Text("Then tap **Install** on your device — nothing else to do to it. Keep iSideload open until it finishes.")
+            Text("Then tap **Install** on your device. First time on a device: enable **Settings ▸ Privacy & Security ▸ Developer Mode** (it restarts once). Keep iSideload open until it finishes.")
                 .font(.caption).foregroundStyle(.secondary).multilineTextAlignment(.center)
                 .fixedSize(horizontal: false, vertical: true)
+            // Live progress, driven by the host serving the IPA.
+            VStack(spacing: 6) {
+                Text(prog.label)
+                    .font(.callout)
+                    .foregroundStyle(prog.stage == "downloaded" ? Color.green : Color.secondary)
+                if prog.total > 0 && (prog.stage == "downloading" || prog.stage == "downloaded") {
+                    ProgressView(value: prog.fraction).frame(width: 300)
+                    Text("\(OTAProgress.mb(prog.sent)) / \(OTAProgress.mb(prog.total))  (\(Int(prog.fraction * 100))%)")
+                        .font(.caption2).foregroundStyle(.secondary).monospacedDigit()
+                }
+            }.padding(.top, 2)
             Button("Done") { AppModel.shared.closeQR() }.keyboardShortcut(.defaultAction)
         }.padding(22).frame(width: 420)
     }
@@ -536,6 +663,7 @@ struct ContentView: View {
                 HStack {
                     Button("Install from .json…") { m.pickJSON() }.disabled(m.installing)
                     Button("Install from .ipa…") { m.pickIPA() }.disabled(m.installing)
+                    Button("Register a device over Wi-Fi…") { m.captureUDID() }.disabled(m.installing)
                 }
                   }
                 }.font(.headline)
